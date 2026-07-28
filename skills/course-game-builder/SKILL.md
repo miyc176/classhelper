@@ -19,8 +19,7 @@ Default behavior:
 - If the user provides an existing `knowledge.json`, validate its shape and generate games directly.
 - If the user asks for classic, arcade, creative, polished, or game-like outputs, prefer the fixed standalone polished templates and replace only generated data files unless a template bug is verified.
 - If the user asks for a specific classic game, generate one standalone HTML game for that mechanic.
-- If the user asks for multiple game types, generate separate standalone folders unless they explicitly ask for a combined arcade.
-- Never use `scripts/build_classic_arcade.py` for polished/default classic-game requests. It is a legacy combined-collection generator and is only allowed when the user explicitly asks for one HTML collection or launcher.
+- If the user asks for multiple game types, generate separate standalone folders. If they explicitly ask for one HTML collection or launcher, create a fresh launcher that links to the standalone games; do not use an old shared arcade shell.
 - Keep outputs self-contained and offline-friendly; do not add CDN or internet dependencies without approval.
 - Do not deliver on appearance alone. Run static validation and a browser smoke check for every interactive HTML game where tooling is available.
 
@@ -48,7 +47,7 @@ Use the relevant file skills when available:
 4. Build a source-traceable knowledge model using `references/knowledge-schema.md`.
 5. Run a coverage audit: every source page/slide/image must have either extracted knowledge points or an explicit "no instructional content" note.
 6. Design games from learning objectives, not from convenience. Read `references/game-patterns.md` before choosing mechanics for a new course/domain.
-7. Build one or more self-contained HTML mini-games. Use `scripts/build_game_from_knowledge.py` for a reliable baseline game. When the user asks for creative, classic, arcade, or polished gameplay, read `references/classic-game-patterns.md`. Default to one standalone HTML game per classic mechanic; do not combine unrelated games into one arcade shell unless the user explicitly requests a collection. For whack-a-mole, use `scripts/build_whack_a_mole.py`, which copies `assets/whack-a-mole-template/` and replaces only `game-data.js`. For memory, tic-tac-toe, flappy, shooter, and puzzle, use `scripts/build_standalone_classic.py`, which copies `assets/standalone-classic-template/` and replaces only `game-data.js`.
+7. Build one or more self-contained HTML mini-games. Use `scripts/build_game_from_knowledge.py` for a reliable baseline game. When the user asks for creative, classic, arcade, or polished gameplay, read `references/classic-game-patterns.md`. Default to one standalone HTML game per classic mechanic. For whack-a-mole, use `scripts/build_whack_a_mole.py`, which copies `assets/whack-a-mole-template/` and replaces only `game-data.js`. For memory, tic-tac-toe, flappy, shooter, and puzzle, use `scripts/build_standalone_classic.py`, which copies `assets/standalone-classic-template/` and replaces only `game-data.js`.
 8. Validate with `scripts/validate_html_game.py`, then run `scripts/browser_smoke_check.mjs` when the game uses JavaScript, layout, animation, drag/drop, canvas, or responsive UI. For classic games, also perform at least one real interaction smoke test for the core mechanic when Playwright is available.
 9. Deliver the game files plus a concise coverage report: source coverage, knowledge-point coverage, game mapping, validation results, and any uncertainties.
 
@@ -80,13 +79,7 @@ Generate any other standalone classic game with `memory`, `tictactoe`, `flappy`,
 python scripts/build_standalone_classic.py path\to\knowledge.json --mode memory --out path\to\memory-game --title "Course Memory" --force
 ```
 
-Legacy combined collection, only when the user explicitly asks for one HTML arcade collection or launcher:
-
-```powershell
-python scripts/build_classic_arcade.py path\to\knowledge.json --out path\to\arcade --title "Course Arcade" --force --allow-collection
-```
-
-Preserve the fixed standalone visual shell unless the user explicitly asks for a redesign. To adapt a new course, regenerate `game-data.js` from `knowledge.json`; do not rewrite `index.html`, `styles.css`, or `game.js` by hand unless a validation issue requires a template fix. Do not use the legacy combined collection as a substitute for polished standalone games.
+Preserve the fixed standalone visual shell unless the user explicitly asks for a redesign. To adapt a new course, regenerate `game-data.js` from `knowledge.json`; do not rewrite `index.html`, `styles.css`, or `game.js` by hand unless a validation issue requires a template fix. If a single collection page is requested, build it as a launcher around generated standalone games rather than merging mechanics into one shared dashboard.
 
 Mode selection shortcuts:
 
@@ -143,7 +136,7 @@ Every generated game must include:
 - No hidden dependency on internet access unless the user approves it.
 - A reset/retry path and visible progress/state.
 - For classic games, each mole/card/cell/gate/enemy/puzzle piece must carry one or more knowledge ids and must not be decorative-only.
-- For polished classic games, use the matching standalone template as the canonical format: `assets/whack-a-mole-template/` for whack-a-mole and `assets/standalone-classic-template/` for memory, tic-tac-toe, flappy, shooter, and puzzle. Use `assets/classic-arcade-template/` only when the user explicitly requests a combined collection. Improve shared template files when quality is insufficient, then reuse them across courses through generated data.
+- For polished classic games, use the matching standalone template as the canonical format: `assets/whack-a-mole-template/` for whack-a-mole and `assets/standalone-classic-template/` for memory, tic-tac-toe, flappy, shooter, and puzzle. Improve shared template files when quality is insufficient, then reuse them across courses through generated data.
 
 ## Quality Gates
 
@@ -185,12 +178,11 @@ node scripts/browser_smoke_check.mjs path\to\game
 - `references/classic-game-patterns.md`: classic mini-game mapping rules for whack-a-mole, memory cards, tic-tac-toe quiz, flappy judge, thunder shooter, and knowledge puzzles.
 - `references/quality-rubric.md`: acceptance gates for extraction and HTML game quality.
 - `assets/html-game-template/`: standalone HTML/CSS/JS template with knowledge coverage metadata.
-- `assets/classic-arcade-template/`: legacy six-mode collection shell; use only for an explicitly requested single HTML collection or launcher, never for default polished standalone games.
 - `assets/whack-a-mole-template/`: standalone arcade-cabinet whack-a-mole template with timed pop/hide, mallet feedback, combo, lives, and course answers on the moles.
 - `assets/standalone-classic-template/`: standalone engine with separate visual identities and mechanics for memory, tic-tac-toe, flappy judgment, shooter, and knowledge puzzle outputs.
 - `scripts/inventory_materials.py`: local material inventory and text/embedded-image extraction for PPTX, PDF, DOCX, text, Markdown, and standalone images.
 - `scripts/build_game_from_knowledge.py`: deterministic baseline HTML game generator from `knowledge.json`.
-- `scripts/build_classic_arcade.py`: legacy combined-collection generator from `knowledge.json`; requires `--allow-collection` and should not be used for polished/default classic-game requests.
+- `scripts/classic_payload.py`: shared deterministic data shaping helpers for standalone classic game generators.
 - `scripts/build_whack_a_mole.py`: deterministic standalone whack-a-mole generator and the preferred default for whack-a-mole requests.
 - `scripts/build_standalone_classic.py`: deterministic generator for the five other independent classic game formats.
 - `scripts/validate_html_game.py`: static validator for required game structure, local asset references, accessibility basics, and declared knowledge coverage.

@@ -6,7 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
-from build_classic_arcade import build_payload, load_knowledge
+from classic_payload import build_payload, load_knowledge
 
 LABELS={"memory":"知识翻牌","tictactoe":"答题井字棋","flappy":"飞翔判断","shooter":"雷霆战机","puzzle":"知识拼图"}
 

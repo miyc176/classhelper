@@ -22,7 +22,6 @@ Critical gates must pass before delivery unless explicitly reported as blocked.
 - Critical: Local assets referenced by HTML/CSS/JS exist.
 - Critical: For classic games, each core interactive object is knowledge-bound: mole, card, tic-tac-toe cell question, flappy gate, shooter enemy, or puzzle piece.
 - Critical: Polished classic games are generated from `assets/whack-a-mole-template/` or `assets/standalone-classic-template/`, with course-specific content isolated in `game-data.js`, unless the user explicitly asks for a new visual format.
-- Critical: `assets/classic-arcade-template/` and `scripts/build_classic_arcade.py` are used only for an explicitly requested single HTML collection or launcher, not for default polished game delivery.
 - Critical: Classic modes visually resemble their source genre before the knowledge layer is applied; a generic button grid with game names is not sufficient.
 - Critical: Classic modes preserve core gameplay semantics, not just surface labels: timed popping for whack-a-mole, flip/match state for memory, answer-gated board moves for tic-tac-toe, pipe timing for flappy judge, aim/fire for shooter, and spatial placement for puzzle.
 - Strong: The game works at common desktop and mobile widths.

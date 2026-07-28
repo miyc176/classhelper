@@ -16,10 +16,10 @@ Use this reference when the user wants polished, creative classic mini-games rat
 ## Arcade Quality Rules
 
 - Build the playable experience as the first screen.
-- Default to one independent HTML game per classic mechanic. A collection is an optional launcher or explicitly requested bundle, never the default container for every game.
-- If the user says "all games" or names several games without saying "one HTML", still generate separate standalone folders. The old combined arcade shell is not an acceptable polished default.
+- Default to one independent HTML game per classic mechanic. If the user requests one combined deliverable, create a launcher page that links to the standalone games; do not merge unlike mechanics into one shared dashboard.
+- If the user says "all games" or names several games without saying "one HTML", still generate separate standalone folders.
 - Do not force different genres into one shared dashboard layout. Each independent game must own its full visual language, scene composition, HUD, controls, motion, and pacing.
-- Use a genre-specific standalone template as the canonical format. Use `assets/classic-arcade-template/` only for an explicitly requested collection. Course generation should replace `game-data.js` only; edit template files only when improving the shared game or fixing a verified bug.
+- Use a genre-specific standalone template as the canonical format. Course generation should replace `game-data.js` only; edit template files only when improving the shared game or fixing a verified bug.
 - Preserve each classic game's recognizable silhouette before adding knowledge content: whack-a-mole needs holes, popping moles, and a mallet cue; memory needs a facedown card grid and card-flip rhythm; tic-tac-toe needs a dominant 3x3 board; flappy judge needs a bird and paired pipe gates; thunder shooter needs a vertical space battlefield, player ship, and enemy targets; puzzle needs loose interlocking pieces plus sorting trays or a board.
 - Self-check rule fidelity, not just clickability: whack-a-mole must have timed pop/hide pressure; flappy judge must have an approaching-gate or collision rhythm; thunder shooter must have aim/fire semantics; puzzle must support drag/drop or an equivalent spatial placement interaction.
 - Preserve the source game's control loop whenever it can carry the teaching task. Do not replace movement, collision, aiming, shooting, or spatial assembly with direct answer buttons.

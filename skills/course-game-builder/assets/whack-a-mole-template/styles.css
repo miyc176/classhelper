@@ -164,24 +164,29 @@ button { font: inherit; }
 .answer {
   position: absolute;
   z-index: 4;
-  left: 15%;
-  right: 15%;
-  bottom: 18px;
-  min-height: 43px;
-  display: grid;
-  place-items: center;
-  padding: 6px 8px;
+  left: 9%;
+  right: 9%;
+  bottom: 15px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 9px;
   overflow: hidden;
   color: #392519;
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
-  font-size: clamp(11px, 1.65vw, 15px);
+  text-align: center;
+  background: linear-gradient(#fff9df, #f4d891);
+  border: 3px solid #5a321f;
+  border-radius: 10px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.8), 0 3px 0 #6f3e21;
+  font-size: clamp(10px, 1.35vw, 14px);
   font-weight: 900;
-  line-height: 1.2;
+  line-height: 1.12;
+  word-break: break-word;
   overflow-wrap: anywhere;
+  hyphens: auto;
 }
-.mole.correct .answer { background: #83df6a; }
+.mole.correct .answer { background: linear-gradient(#b8f58a, #73cf55); }
 .mole.wrong .answer { background: #ff776e; color: #57130f; }
 .mallet {
   position: absolute;
@@ -316,7 +321,7 @@ dialog button { width: 180px; }
   .mole { width: 112%; height: 152px; }
   .mole-face { inset-inline: 10px; }
   .eye.left { left: 30px; }.eye.right { right: 30px; }
-  .answer { font-size: 9px; min-height: 39px; bottom: 16px; padding: 3px; }
+  .answer { left: 6%; right: 6%; bottom: 13px; height: 48px; padding: 3px 5px; font-size: 10.5px; border-width: 2px; border-radius: 8px; }
   .status { grid-template-columns: 1fr 110px; }
   .status p { grid-column: 1 / -1; grid-row: 1; }
   .lives { justify-content: flex-start; padding-left: 14px; }

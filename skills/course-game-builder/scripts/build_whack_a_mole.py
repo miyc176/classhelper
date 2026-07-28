@@ -16,6 +16,40 @@ def compact(text: Any, limit: int = 24) -> str:
     return value if len(value) <= limit else value[: limit - 1] + "…"
 
 
+def answer_label(text: Any, limit: int = 16) -> str:
+    value = " ".join(str(text).split())
+    phrase_rules = [
+        ("插头公头", "USB公头/插座"),
+        ("全模组", "电源模组类型"),
+        ("读写速度", "内存读写更快"),
+        ("接口与协议", "USB接口与协议"),
+        ("Type-C", "USB Type-C"),
+        ("LGA1700", "LGA1700/AM5平台"),
+        ("AM5", "LGA1700/AM5平台"),
+        ("DIMM", "DIMM/SODIMM"),
+        ("SODIMM", "DIMM/SODIMM"),
+        ("BGA", "BGA封装"),
+    ]
+    for needle, label in phrase_rules:
+        if needle in value and len(label) <= limit:
+            return label
+    for separator in ["；", "，", "。", ";", ",", "."]:
+        value = value.split(separator, 1)[0]
+    replacements = {
+        "通常": "",
+        "主要": "",
+        "包括": "含",
+        "区分": "分",
+        "为什么": "为何",
+        "正确": "",
+    }
+    for source, target in replacements.items():
+        value = value.replace(source, target)
+    value = value.strip(" ：:，,。.;；")
+    candidate = value or str(text)
+    return candidate if len(candidate) <= limit else candidate[:limit]
+
+
 def load_points(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     points = [
@@ -34,8 +68,8 @@ def build_questions(points: list[dict[str, Any]], seed: int, count: int) -> list
     selected = selected[: min(count, len(selected))]
     questions = []
     for point in selected:
-        answer = compact(point["statement"], 18)
-        decoys = [compact(item["statement"], 18) for item in points if item["id"] != point["id"]]
+        answer = answer_label(point["statement"])
+        decoys = [answer_label(item["statement"]) for item in points if item["id"] != point["id"]]
         rng.shuffle(decoys)
         choices = [answer, *decoys[:3]]
         rng.shuffle(choices)

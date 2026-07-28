@@ -32,6 +32,16 @@ function esc(value) {
 function shuffle(values) {
   return [...values].sort(() => Math.random() - .5);
 }
+function fitChoiceLabel(label) {
+  label.style.fontSize = "";
+  requestAnimationFrame(() => {
+    let size = parseFloat(getComputedStyle(label).fontSize);
+    while ((label.scrollHeight > label.clientHeight || label.scrollWidth > label.clientWidth) && size > 7) {
+      size -= 0.5;
+      label.style.fontSize = `${size}px`;
+    }
+  });
+}
 function renderLives() {
   livesEl.innerHTML = [0, 1, 2].map((i) => `<span class="heart ${i >= lives ? "lost" : ""}"></span>`).join("");
 }
@@ -80,7 +90,10 @@ function showQuestion() {
     mole.dataset.choice = choices[index];
     mole.dataset.answer = item.answer;
     mole.dataset.knowledgeId = item.id;
-    mole.querySelector(".answer").textContent = choices[index];
+    const label = mole.querySelector(".answer");
+    label.textContent = choices[index];
+    label.title = choices[index];
+    fitChoiceLabel(label);
     mole.classList.remove("correct", "wrong", "hit");
   });
   let appearIndex = 0;

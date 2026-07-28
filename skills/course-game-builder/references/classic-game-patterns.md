@@ -17,6 +17,7 @@ Use this reference when the user wants polished, creative classic mini-games rat
 
 - Build the playable experience as the first screen.
 - Default to one independent HTML game per classic mechanic. A collection is an optional launcher or explicitly requested bundle, never the default container for every game.
+- If the user says "all games" or names several games without saying "one HTML", still generate separate standalone folders. The old combined arcade shell is not an acceptable polished default.
 - Do not force different genres into one shared dashboard layout. Each independent game must own its full visual language, scene composition, HUD, controls, motion, and pacing.
 - Use a genre-specific standalone template as the canonical format. Use `assets/classic-arcade-template/` only for an explicitly requested collection. Course generation should replace `game-data.js` only; edit template files only when improving the shared game or fixing a verified bug.
 - Preserve each classic game's recognizable silhouette before adding knowledge content: whack-a-mole needs holes, popping moles, and a mallet cue; memory needs a facedown card grid and card-flip rhythm; tic-tac-toe needs a dominant 3x3 board; flappy judge needs a bird and paired pipe gates; thunder shooter needs a vertical space battlefield, player ship, and enemy targets; puzzle needs loose interlocking pieces plus sorting trays or a board.

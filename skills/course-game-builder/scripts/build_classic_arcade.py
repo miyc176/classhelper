@@ -501,7 +501,20 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=11)
     parser.add_argument("--template-dir", help="Override the fixed arcade template directory.")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--allow-collection",
+        action="store_true",
+        help="Allow the legacy combined arcade collection. For polished classic games, use build_whack_a_mole.py or build_standalone_classic.py instead.",
+    )
     args = parser.parse_args()
+
+    if not args.allow_collection:
+        parser.error(
+            "build_classic_arcade.py is a legacy combined-collection generator. "
+            "For polished/default classic games, use build_whack_a_mole.py or "
+            "build_standalone_classic.py. Re-run with --allow-collection only "
+            "when the user explicitly asks for one HTML collection or launcher."
+        )
 
     data = load_knowledge(Path(args.knowledge_json).resolve())
     payload = build_payload(data, args.seed)

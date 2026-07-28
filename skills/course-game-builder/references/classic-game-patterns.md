@@ -42,6 +42,7 @@ Use `assets/whack-a-mole-template/` and preserve these non-negotiable traits:
 - Random staggered appearance, finite exposure time, miss penalty, score, combo, lives, and a visible mallet strike.
 - Only risen moles may be hit. Hitting an empty hole or hidden mole must never count as an answer.
 - Keep answer text concise enough to remain readable on the game object. Rewrite a statement into a short source-faithful option instead of shrinking paragraphs into a mole.
+- Do not use ellipsis as the default solution for mole answers. Put a complete short label on the mole sign and keep the full explanation in feedback.
 
 ## Mapping Checklist
 

@@ -61,6 +61,24 @@ def validate(skill_dir: Path) -> tuple[list[str], list[str]]:
         warnings.append("SKILL.md contains TODO text.")
     if not (skill_dir / "agents" / "openai.yaml").exists():
         warnings.append("agents/openai.yaml is missing.")
+
+    forbidden_paths = [
+        skill_dir / "assets" / "classic-arcade-template",
+        skill_dir / "scripts" / "build_classic_arcade.py",
+    ]
+    for path in forbidden_paths:
+        if path.exists():
+            errors.append(f"Legacy combined arcade resource must not be present: {path.relative_to(skill_dir)}")
+
+    search_files = [skill_md, *(skill_dir / "references").glob("*.md")]
+    forbidden_terms = ["classic-arcade-template", "build_classic_arcade.py", "课程精美小游戏合集"]
+    for file_path in search_files:
+        if not file_path.exists():
+            continue
+        file_text = file_path.read_text(encoding="utf-8", errors="ignore")
+        for term in forbidden_terms:
+            if term in file_text:
+                errors.append(f"Forbidden legacy reference {term!r} found in {file_path.relative_to(skill_dir)}")
     return errors, warnings
 
 

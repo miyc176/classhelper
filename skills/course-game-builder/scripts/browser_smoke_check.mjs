@@ -44,13 +44,27 @@ const viewports = [
 ];
 
 async function launchBrowser() {
-  for (const options of [{ channel: "msedge" }, { channel: "chrome" }, {}]) {
+  const executableCandidates = [
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+  ].filter(Boolean).filter((candidate) => fs.existsSync(candidate));
+  const optionCandidates = [
+    ...executableCandidates.map((executablePath) => ({ executablePath })),
+    { channel: "msedge" },
+    { channel: "chrome" },
+    {}
+  ];
+  let lastError = null;
+  for (const options of optionCandidates) {
     try {
       return await chromium.launch(options);
     } catch (error) {
-      if (!options.channel) throw error;
+      lastError = error;
     }
   }
+  throw lastError;
 }
 
 const browser = await launchBrowser();
@@ -81,6 +95,19 @@ for (const viewport of viewports) {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && (rect.right < -4 || rect.left > window.innerWidth + 4);
     });
+    const textFrames = [...document.querySelectorAll(".answer, .card-front, .piece-label, .enemy-craft span, .pipe-label, .gate-label, .cell")].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      return element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1;
+    }).map((element) => ({
+      tag: element.tagName.toLowerCase(),
+      className: element.className,
+      text: element.textContent.trim().slice(0, 80),
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight
+    }));
     return {
       title: document.title,
       textLength: document.body.innerText.trim().length,
@@ -88,7 +115,8 @@ for (const viewport of viewports) {
       hasMain: Boolean(document.querySelector("main")),
       coverage,
       bodyWidth: body.width,
-      overflowing
+      overflowing,
+      textFrames
     };
   });
 
@@ -104,6 +132,7 @@ for (const viewport of viewports) {
   if (!state.hasMain) errors.push(`${viewport.name}: missing main landmark`);
   if (!state.coverage || state.coverage.length === 0) errors.push(`${viewport.name}: missing GAME_KNOWLEDGE_COVERAGE array`);
   if (state.overflowing) errors.push(`${viewport.name}: detected horizontally overflowing element`);
+  if (state.textFrames.length) errors.push(`${viewport.name}: text spills inside ${state.textFrames.length} control frame(s)`);
 
   results.push({ viewport, screenshot, state, consoleErrors, pageErrors });
 }

@@ -22,6 +22,7 @@ Default behavior:
 - If the user asks for multiple game types, generate separate standalone folders. If they explicitly ask for one HTML collection or launcher, create a fresh launcher that links to the standalone games; do not use an old shared arcade shell.
 - Keep outputs self-contained and offline-friendly; do not add CDN or internet dependencies without approval.
 - Do not deliver on appearance alone. Run static validation and a browser smoke check for every interactive HTML game where tooling is available.
+- After changing any classic template, generator, or quality rule, run `scripts/validate_classic_template_set.py` with a representative `knowledge.json`.
 
 Required output contract:
 
@@ -155,6 +156,7 @@ If the system `python` is unavailable, use the bundled Codex Python runtime. Als
 - All images/media render and have teaching purpose.
 - Interactions work after reset and across at least two rounds.
 - Scoring and answer logic match the extracted knowledge.
+- Text on game objects fits inside its object frame at desktop and mobile sizes. For whack-a-mole, answer labels must be short, complete labels on the mole sign; keep longer explanations in feedback.
 
 Interaction smoke examples:
 
@@ -169,6 +171,12 @@ When Node and Playwright are available, use:
 ```powershell
 $env:NODE_PATH="path\to\node_modules"
 node scripts/browser_smoke_check.mjs path\to\game
+```
+
+After editing classic templates or generators, run the full deterministic template set check:
+
+```powershell
+python scripts/validate_classic_template_set.py path\to\knowledge.json --out path\to\classic-template-check --force
 ```
 
 ## Resources
@@ -186,5 +194,6 @@ node scripts/browser_smoke_check.mjs path\to\game
 - `scripts/build_whack_a_mole.py`: deterministic standalone whack-a-mole generator and the preferred default for whack-a-mole requests.
 - `scripts/build_standalone_classic.py`: deterministic generator for the five other independent classic game formats.
 - `scripts/validate_html_game.py`: static validator for required game structure, local asset references, accessibility basics, and declared knowledge coverage.
+- `scripts/validate_classic_template_set.py`: deterministic generation and static validation check for whack-a-mole, memory, tic-tac-toe, flappy, shooter, and puzzle templates.
 - `scripts/browser_smoke_check.mjs`: Playwright smoke test for browser runtime errors, desktop/mobile rendering, screenshots, and basic interaction presence.
 - `scripts/validate_skill_no_deps.py`: dependency-free skill validator for environments where the official validator lacks PyYAML.

@@ -24,12 +24,14 @@ Critical gates must pass before delivery unless explicitly reported as blocked.
 - Critical: Polished classic games are generated from `assets/whack-a-mole-template/` or `assets/standalone-classic-template/`, with course-specific content isolated in `game-data.js`, unless the user explicitly asks for a new visual format.
 - Critical: Classic modes visually resemble their source genre before the knowledge layer is applied; a generic button grid with game names is not sufficient.
 - Critical: Classic modes preserve core gameplay semantics, not just surface labels: timed popping for whack-a-mole, flip/match state for memory, answer-gated board moves for tic-tac-toe, pipe timing for flappy judge, aim/fire for shooter, and spatial placement for puzzle.
+- Critical: Knowledge text on core game objects fits inside its visible frame at desktop and mobile widths; whack-a-mole answer signs must use complete short labels, not clipped paragraphs.
 - Strong: The game works at common desktop and mobile widths.
 - Strong: Controls are keyboard reachable where practical.
 - Strong: Visual design is clean, readable, and domain-appropriate.
 - Strong: The game has reset/retry and progress state.
 - Strong: A deterministic baseline can be regenerated from `knowledge.json` with `scripts/build_game_from_knowledge.py`.
 - Strong: Creative classic games can be regenerated from `knowledge.json` with `scripts/build_whack_a_mole.py` or `scripts/build_standalone_classic.py` when classic mini-games are requested.
+- Strong: The full classic template set passes `scripts/validate_classic_template_set.py` after any template or generator edit.
 
 ## Delivery Checklist
 

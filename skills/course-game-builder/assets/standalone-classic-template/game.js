@@ -43,6 +43,24 @@ function feedback(text) {
   $("#feedback").textContent = text;
 }
 
+function showReview(title, body, onContinue) {
+  const existing = stage.querySelector(".review-overlay");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "review-overlay";
+  overlay.innerHTML = `
+    <div class="review-card">
+      <strong>${esc(title)}</strong>
+      <p>${esc(body)}</p>
+      <button type="button">确认继续</button>
+    </div>`;
+  stage.appendChild(overlay);
+  overlay.querySelector("button").onclick = () => {
+    overlay.remove();
+    onContinue();
+  };
+}
+
 function stopAnimation() {
   cancelAnimationFrame(animationFrame);
   animationFrame = 0;
@@ -180,6 +198,7 @@ function renderFlappy() {
   let wallX = stage.clientWidth + 150;
   let last = performance.now();
   let resolving = false;
+  let pausedForReview = false;
 
   const flap = () => {
     if (resolving) return;
@@ -226,15 +245,34 @@ function renderFlappy() {
 
     bird.classList.add("crashed");
     wall.classList.add("wall-hit");
-    feedback(`撞上了错误通道。${question.why}`);
-    index += 1;
+    feedback("判断错误，先看解析，再继续飞。");
+    pausedForReview = true;
     update();
-    setTimeout(() => (index >= data.items.length ? finish() : renderFlappy()), 850);
+    showReview("判断解析", question.why, () => {
+      index += 1;
+      update();
+      if (index >= data.items.length) {
+        finish();
+        return;
+      }
+      bird.classList.remove("crashed");
+      wall.classList.remove("wall-hit");
+      y = stage.clientHeight * 0.47;
+      velocity = 0;
+      resolving = false;
+      pausedForReview = false;
+      resetWall();
+      feedback("继续飞行，选择下一道判断的正确通道。");
+    });
   }
 
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.032);
     last = now;
+    if (pausedForReview) {
+      if (started && data.mode === "flappy") animationFrame = requestAnimationFrame(frame);
+      return;
+    }
     velocity += 920 * dt;
     y += velocity * dt;
     if (!resolving) wallX -= 205 * dt;
@@ -399,7 +437,7 @@ function puzzlePath(edge, x, y, width, height) {
   ].filter(Boolean).join(" ");
 }
 
-function pieceMarkup(item, slotIndex, filled = false) {
+function pieceMarkup(item, slotIndex, filled = false, showLabel = true) {
   const colors = ["#f7c84f", "#5ec2d8", "#f06f59", "#8fd16c"];
   const edges = [
     { top: 0, right: 1, bottom: 1, left: 0 },
@@ -414,15 +452,39 @@ function pieceMarkup(item, slotIndex, filled = false) {
       <path d="${path}" fill="${fill}" stroke="${filled ? "#263238" : "#6d756f"}" stroke-width="${filled ? 4 : 3}" />
       <path d="${path}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2" transform="translate(-3 -3)" />
     </svg>
-    <span class="piece-label"><strong>${esc(item.label)}</strong><small>${esc(item.text)}</small></span>`;
+    ${showLabel ? `<span class="piece-label"><strong>${esc(item.label)}</strong><small>${esc(item.text)}</small></span>` : ""}`;
+}
+
+function buildPuzzleRounds() {
+  const source = data.items.slice();
+  const rounds = [];
+  for (let start = 0; start + 3 < source.length; start += 6) {
+    const targets = source.slice(start, start + 4);
+    let distractors = source.slice(start + 4, start + 6);
+    if (distractors.length < 2) {
+      distractors = [
+        ...distractors,
+        ...source.filter((item) => !targets.some((target) => target.id === item.id) && !distractors.some((decoy) => decoy.id === item.id)),
+      ].slice(0, 2);
+    }
+    rounds.push({ targets, distractors });
+  }
+  return rounds;
 }
 
 function renderPuzzle() {
   stopAnimation();
-  puzzleTargets = data.items.slice(0, 4);
-  const distractors = data.items.filter((item) => !puzzleTargets.some((target) => target.id === item.id)).slice(0, 2);
-  const pieces = [...puzzleTargets, ...distractors].sort(() => Math.random() - 0.5);
-  setMission("把正确概念拼进完整拼图框", "拖动少量大拼图块，避开混入的干扰概念，让整块拼图板被正确填满。", "知识拼图");
+  const rounds = buildPuzzleRounds();
+  if (!rounds.length) {
+    setMission("知识点不足，无法生成拼图。", "至少需要 4 个可用知识点。", "知识拼图");
+    stage.innerHTML = `<div class="empty-state">知识点不足，无法生成拼图。</div>`;
+    return;
+  }
+  const roundIndex = Math.min(Math.floor(index / 4), rounds.length - 1);
+  const round = rounds[roundIndex];
+  puzzleTargets = round.targets;
+  const pieces = [...round.targets, ...round.distractors].sort(() => Math.random() - 0.5);
+  setMission(`第 ${roundIndex + 1}/${rounds.length} 题：选出 4 个正确概念拼满拼图框`, "拼图板只显示空白形状，不给答案；从 6 块中排除 2 个干扰概念。", "知识拼图");
   stage.innerHTML = `
     <div class="jigsaw-workbench">
       <div class="loose-pieces">${pieces.map((item, pieceIndex) => `
@@ -432,7 +494,7 @@ function renderPuzzle() {
       <div class="puzzle-board" aria-label="拼图框">
         ${puzzleTargets.map((item, targetIndex) => `
           <button class="puzzle-slot slot-${targetIndex}" data-id="${item.id}" data-slot="${targetIndex}">
-            ${pieceMarkup(item, targetIndex, false)}
+            ${pieceMarkup(item, targetIndex, false, false)}
           </button>`).join("")}
       </div>
     </div>`;
@@ -475,7 +537,14 @@ function renderPuzzle() {
       index += 1;
       feedback("吸附成功，拼图框填入了一块正确知识点。");
       update();
-      if (stage.querySelectorAll(".puzzle-slot.filled").length === puzzleTargets.length) finish();
+      if (stage.querySelectorAll(".puzzle-slot.filled").length === puzzleTargets.length) {
+        if (index >= data.total || roundIndex >= rounds.length - 1) {
+          finish();
+        } else {
+          feedback("本题拼图完成，进入下一组概念。");
+          setTimeout(renderPuzzle, 850);
+        }
+      }
     } else {
       slot.classList.add("reject");
       feedback("这块概念与该位置不匹配，换一块再试。");

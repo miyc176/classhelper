@@ -9,9 +9,9 @@ Use this reference when the user wants polished, creative classic mini-games rat
 | Whack-a-mole | single-choice recall, identify the correct statement | Show one prompt and 4-6 popping choices across multiple holes. The learner clicks only the mole belly containing the source-grounded answer before time runs out. Wrong moles must be plausible distractors from the same course. |
 | Memory flip cards | vocabulary, part-function, term-example pairs | Use a facedown card grid with real flip state. Pair hardware terms, formulas, diagram labels, or process names with concise definitions or examples. A match is correct only when both cards share a knowledge id or relationship. |
 | Tic-tac-toe quiz | mixed review and classroom competition | A learner may place a mark only after answering a course question correctly. Wrong answers lose the move; the bot or second player responds. |
-| Flappy judge | true/false, misconceptions, compatibility rules | Preserve Flappy-style vertical control and forward scrolling. Put Yes/No openings in an approaching wall; the learner must physically steer through the correct opening. On a correct pass, remove/fade the wall and continue flying into the next statement without rebuilding the whole scene; a wrong opening or wall hit causes a collision. |
-| Thunder shooter | multiple choice and error elimination | Preserve free ship movement and firing. Use WASD or arrow keys to move and Space to fire. Enemy craft carry answer options; the learner destroys wrong options while protecting the correct answer. |
-| Knowledge puzzle | structure, sequence, hierarchy, visual organization | Use a finite puzzle frame with a small number of large interlocking pieces, usually 4 correct pieces plus 1-2 distractors. Pieces should look like real jigsaw parts with tabs/blanks or Z/T/L/S-like silhouettes, and the learner drags correct concepts into matching slots until the frame is full. |
+| Flappy judge | true/false, misconceptions, compatibility rules | Preserve Flappy-style vertical control and forward scrolling. Put Yes/No openings in an approaching wall; the learner must physically steer through the correct opening. On a correct pass, remove/fade the wall and continue flying into the next statement without rebuilding the whole scene; a wrong opening or wall hit causes a collision, shows the source-grounded explanation, and resumes only after the learner confirms. |
+| Thunder shooter | multiple choice and error elimination | Preserve free ship movement and firing. Use WASD or arrow keys to move and Space to fire. Enemy craft must visibly look like arcade aircraft and carry answer options; the learner destroys wrong options while protecting the correct answer. |
+| Knowledge puzzle | structure, sequence, hierarchy, visual organization | Use multi-select puzzle rounds: one prompt, 4 correct concept pieces, and 2 distractor pieces. The board must show only blank interlocking silhouettes, not the answers. Pieces should look like real jigsaw parts with tabs/blanks or Z/T/L/S-like silhouettes, and the learner drags correct concepts into matching slots until the frame is full. |
 
 ## Arcade Quality Rules
 
@@ -31,6 +31,7 @@ Use this reference when the user wants polished, creative classic mini-games rat
 - Use course images, rendered slides, or domain-specific visuals when available. If no source visual is available, create polished CSS/canvas visuals directly.
 - Validate both code and browser rendering. Inspect desktop and mobile screenshots.
 - Preserve mode identity and high production value: knowledge should live on the game objects themselves, such as text on a mole belly, card faces, chess move gates, pipe labels, enemy bodies, or puzzle pieces. Avoid generic quiz cards floating in a decorative shell.
+- Item-writing rule: prompts must ask one clear question, options must be short complete labels, distractors must come from nearby course concepts, and no core game object may rely on ellipsis to hide an overlong statement.
 
 ## Whack-a-Mole Visual Baseline
 
@@ -39,7 +40,7 @@ Use `assets/whack-a-mole-template/` and preserve these non-negotiable traits:
 - A full-field arcade composition rather than an app dashboard.
 - A 3x3 field of dark holes with moles physically rising from and sinking into them.
 - The prompt fixed above the field and each answer printed on a sign/belly attached to a visible mole.
-- Random staggered appearance, finite exposure time, miss penalty, score, combo, lives, and a visible mallet strike.
+- Random staggered appearance, finite exposure time, miss penalty, score, combo, lives, and a visible mallet strike that disappears after the hit animation.
 - Only risen moles may be hit. Hitting an empty hole or hidden mole must never count as an answer.
 - Keep answer text concise enough to remain readable on the game object. Rewrite a statement into a short source-faithful option instead of shrinking paragraphs into a mole.
 - Do not use ellipsis as the default solution for mole answers. Put a complete short label on the mole sign and keep the full explanation in feedback.
@@ -53,6 +54,6 @@ Before coding, make a mode map:
 - Tic-tac-toe: 9 mixed questions with varied difficulty.
 - Flappy judge: 8-12 true/false statements, including misconceptions.
 - Thunder shooter: 3-5 categories with targets and decoys.
-- Puzzle: 6-12 pieces organized into a hierarchy, sequence, or category board.
+- Puzzle: 6-12 pieces organized into one or more 4-correct-plus-2-distractor rounds.
 
 When knowledge is sparse, generate fewer modes with better integration rather than forcing all six. When knowledge is rich enough, include all six.

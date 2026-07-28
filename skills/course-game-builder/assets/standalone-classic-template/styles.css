@@ -20,6 +20,12 @@ h2 { letter-spacing:0; }
 .footer p { margin:0; line-height:1.45; }
 .footer button,.primary { min-height:48px; color:#fff; background:var(--accent); border:0; padding:0 18px; font-weight:900; cursor:pointer; box-shadow:0 4px 0 color-mix(in srgb,var(--accent),#000 34%); }
 .footer button:active,.primary:active { transform:translateY(3px); box-shadow:0 1px 0 color-mix(in srgb,var(--accent),#000 34%); }
+.review-overlay { position:absolute; z-index:20; inset:0; display:grid; place-items:center; padding:20px; background:rgba(9,20,32,.38); }
+.review-card { width:min(520px,calc(100% - 24px)); padding:22px; color:var(--ink); background:rgba(255,255,255,.97); border:1px solid var(--line); box-shadow:0 18px 40px rgba(0,0,0,.26); }
+.review-card strong { display:block; margin-bottom:8px; color:var(--accent); font-size:13px; }
+.review-card p { margin:0 0 16px; line-height:1.55; }
+.review-card button { width:100%; min-height:46px; color:#fff; background:var(--accent); border:0; font-weight:900; cursor:pointer; }
+.empty-state { display:grid; place-items:center; min-height:360px; color:#fff; font-weight:800; }
 
 /* Memory: tactile tabletop */
 .mode-memory { --paper:#efe6d2; --ink:#33291f; --line:#cbbd9f; --accent:#c73f32; background:#3c2d24; }
@@ -78,10 +84,10 @@ h2 { letter-spacing:0; }
 .battlefield { position:absolute; inset:0; overflow:hidden; background:radial-gradient(ellipse at 18% 25%,#2b895d 0 8%,#165f4b 9%,transparent 17%),radial-gradient(ellipse at 80% 28%,#3da064 0 7%,#16614f 8%,transparent 15%),radial-gradient(ellipse at 16% 78%,#41a667 0 9%,#135342 10%,transparent 18%),radial-gradient(ellipse at 78% 78%,#2e8a5c 0 7%,#125140 8%,transparent 16%),linear-gradient(90deg,#061322 0,#09101b 22%,#030609 50%,#09101b 78%,#061322 100%); }
 .battlefield::before { content:""; position:absolute; inset:-10% 31%; background:repeating-linear-gradient(180deg,rgba(60,235,255,.0) 0 70px,rgba(60,235,255,.72) 72px 140px,rgba(60,235,255,.0) 142px 220px); filter:blur(2px) drop-shadow(0 0 16px #36e8ff); animation:beam-scroll 1.4s linear infinite; }
 .battlefield::after { content:""; position:absolute; inset:0; background:radial-gradient(circle,#fff 0 1px,transparent 2px) 0 0/58px 58px,linear-gradient(rgba(255,255,255,.05),transparent 26%,rgba(255,255,255,.08)); opacity:.62; pointer-events:none; }
-.enemy-craft { position:absolute; z-index:3; width:25%; min-height:128px; padding:0; overflow:visible; color:#fff8d8; background:transparent; border:0; cursor:crosshair; font-weight:900; line-height:1.25; text-shadow:0 2px 2px rgba(0,0,0,.75); filter:drop-shadow(0 10px 9px rgba(0,0,0,.45)); animation:enemy-glow 1.8s ease-in-out infinite alternate; }
-.enemy-craft::before { content:""; position:absolute; inset:0; background:radial-gradient(ellipse at 50% 18%,#d9fbff 0 10%,#31dfff 11% 20%,transparent 21%),linear-gradient(145deg,#f06a22 0 18%,#f4f8ff 19% 34%,#c33126 35% 54%,#641c2b 55% 100%); border:2px solid #ffe39a; clip-path:polygon(50% 0,64% 20%,92% 27%,78% 50%,98% 78%,66% 72%,50% 100%,34% 72%,2% 78%,22% 50%,8% 27%,36% 20%); box-shadow:inset 0 0 0 2px rgba(255,255,255,.2); }
-.enemy-craft::after { content:""; position:absolute; left:26%; right:26%; bottom:-8px; height:10px; border-radius:50%; background:#ff7c2c; box-shadow:0 0 12px #ff7c2c; }
-.enemy-craft span { position:absolute; z-index:2; left:9%; right:9%; top:46%; display:-webkit-box; max-height:68px; overflow:hidden; -webkit-line-clamp:3; -webkit-box-orient:vertical; color:#fff; background:rgba(9,24,38,.86); border:1px solid rgba(126,230,255,.82); padding:8px 9px; border-radius:4px; }
+.enemy-craft { position:absolute; z-index:3; width:24%; min-height:144px; padding:0; overflow:visible; color:#fff8d8; background:transparent; border:0; cursor:crosshair; font-weight:900; line-height:1.25; text-shadow:0 2px 2px rgba(0,0,0,.75); filter:drop-shadow(0 12px 10px rgba(0,0,0,.5)); animation:enemy-glow 1.8s ease-in-out infinite alternate; }
+.enemy-craft::before { content:""; position:absolute; inset:0 5%; background:radial-gradient(ellipse at 50% 16%,#efffff 0 7%,#58e8ff 8% 14%,transparent 15%),linear-gradient(90deg,transparent 0 13%,#ff7c2c 14% 25%,#fff3d8 26% 34%,#2ad4ff 35% 50%,#fff3d8 51% 64%,#ff7c2c 65% 76%,transparent 77%),linear-gradient(180deg,#ffef71 0 12%,#f94f2e 13% 44%,#8b1538 45% 100%); clip-path:polygon(50% 0,60% 16%,82% 18%,72% 36%,97% 54%,72% 61%,84% 95%,55% 77%,50% 100%,45% 77%,16% 95%,28% 61%,3% 54%,28% 36%,18% 18%,40% 16%); box-shadow:inset 0 0 0 2px rgba(255,255,255,.28),0 0 0 2px rgba(255,222,92,.7); }
+.enemy-craft::after { content:""; position:absolute; left:34%; right:34%; bottom:-12px; height:20px; border-radius:50% 50% 60% 60%; background:linear-gradient(#fff48a,#ff802f 45%,rgba(255,75,35,.1)); filter:blur(.3px); box-shadow:0 0 15px #ff7c2c,0 0 30px rgba(49,224,255,.45); }
+.enemy-craft span { position:absolute; z-index:2; left:14%; right:14%; top:46%; display:-webkit-box; max-height:58px; overflow:hidden; -webkit-line-clamp:3; -webkit-box-orient:vertical; color:#fff; background:linear-gradient(180deg,rgba(13,45,70,.93),rgba(4,16,30,.92)); border:1px solid rgba(156,239,255,.9); padding:7px 8px; border-radius:10px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 3px 10px rgba(0,0,0,.35); }
 .enemy-craft.destroyed { pointer-events:none; animation:enemy-burst .48s ease forwards; }
 .enemy-craft.protected { animation:shield-hit .55s ease; box-shadow:0 0 0 6px rgba(84,222,255,.42); }
 .battlefield .player-ship { position:absolute; z-index:4; width:88px; height:106px; bottom:auto; transform:none; transition:none; }
@@ -153,7 +159,7 @@ dialog { width:min(640px,calc(100% - 24px)); padding:0; border:1px solid var(--l
   .judge-door span { width:58px; height:58px; font-size:26px; }
   .door-yes { top:calc(30% - 58px); }
   .door-no { top:calc(70% - 58px); }
-  .enemy-craft { width:38%; font-size:11px; padding:18px 8px; }
+  .enemy-craft { width:38%; min-height:132px; font-size:11px; }
   .jigsaw-workbench { grid-template-columns:1fr; }
   .loose-pieces { min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); padding:14px; gap:12px; }
   .jigsaw-piece { min-height:132px; }

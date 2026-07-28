@@ -13,7 +13,18 @@ from typing import Any
 
 def compact(text: Any, limit: int = 24) -> str:
     value = " ".join(str(text).split())
-    return value if len(value) <= limit else value[: limit - 1] + "…"
+    return value if len(value) <= limit else value[:limit].rstrip()
+
+
+def dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        cleaned = " ".join(str(value).split())
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            result.append(cleaned)
+    return result
 
 
 def answer_label(text: Any, limit: int = 16) -> str:
@@ -50,6 +61,14 @@ def answer_label(text: Any, limit: int = 16) -> str:
     return candidate if len(candidate) <= limit else candidate[:limit]
 
 
+def question_prompt(point: dict[str, Any], answer: str) -> str:
+    source_prompt = str((point.get("assessment_prompts") or [""])[0]).strip()
+    source_prompt = " ".join(source_prompt.split())
+    if 8 <= len(source_prompt) <= 48 and "..." not in source_prompt and "…" not in source_prompt:
+        return source_prompt
+    return f"下列哪一项最准确对应“{answer}”？"
+
+
 def load_points(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     points = [
@@ -69,13 +88,15 @@ def build_questions(points: list[dict[str, Any]], seed: int, count: int) -> list
     questions = []
     for point in selected:
         answer = answer_label(point["statement"])
-        decoys = [answer_label(item["statement"]) for item in points if item["id"] != point["id"]]
+        decoys = dedupe([answer_label(item["statement"]) for item in points if item["id"] != point["id"]])
         rng.shuffle(decoys)
-        choices = [answer, *decoys[:3]]
+        choices = dedupe([answer, *decoys])[:4]
+        if len(choices) < 4:
+            choices.extend(f"{answer}-{i + 1}" for i in range(4 - len(choices)))
         rng.shuffle(choices)
         questions.append({
             "id": str(point["id"]),
-            "prompt": str(point["assessment_prompts"][0]),
+            "prompt": question_prompt(point, answer),
             "answer": answer,
             "choices": choices,
             "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),

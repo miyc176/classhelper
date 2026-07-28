@@ -25,6 +25,10 @@ Critical gates must pass before delivery unless explicitly reported as blocked.
 - Critical: Classic modes visually resemble their source genre before the knowledge layer is applied; a generic button grid with game names is not sufficient.
 - Critical: Classic modes preserve core gameplay semantics, not just surface labels: timed popping for whack-a-mole, flip/match state for memory, answer-gated board moves for tic-tac-toe, pipe timing for flappy judge, aim/fire for shooter, and spatial placement for puzzle.
 - Critical: Knowledge text on core game objects fits inside its visible frame at desktop and mobile widths; whack-a-mole answer signs must use complete short labels, not clipped paragraphs.
+- Critical: Generated prompts and options are clear assessment items, not raw slide statements. The learner should understand what is being asked from the visible prompt and options alone.
+- Critical: Flip cards, moles, enemies, and puzzle pieces do not use ellipsis to mask overlong labels; they must use complete short labels with full explanations in feedback.
+- Critical: Flappy judge shows an explanation after a wrong gate or collision and requires confirmation before continuing.
+- Critical: Knowledge puzzle uses blank target slots, not answer-labeled slots, and uses 4 correct concept pieces plus distractors whenever enough knowledge points exist.
 - Strong: The game works at common desktop and mobile widths.
 - Strong: Controls are keyboard reachable where practical.
 - Strong: Visual design is clean, readable, and domain-appropriate.

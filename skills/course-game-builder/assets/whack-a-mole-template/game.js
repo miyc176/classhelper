@@ -21,6 +21,7 @@ let roundLocked = false;
 let tickTimer = null;
 let popTimer = null;
 let hideTimer = null;
+let malletTimer = null;
 
 document.title = data.title;
 $("#game-title").textContent = data.title;
@@ -112,9 +113,11 @@ function swingAt(event) {
   const rect = $("#field").getBoundingClientRect();
   malletEl.style.left = `${event.clientX - rect.left}px`;
   malletEl.style.top = `${event.clientY - rect.top}px`;
+  clearTimeout(malletTimer);
   malletEl.classList.remove("swing");
   void malletEl.offsetWidth;
   malletEl.classList.add("swing");
+  malletTimer = setTimeout(() => malletEl.classList.remove("swing"), 320);
 }
 function hitMole(event) {
   if (!running || roundLocked || !event.currentTarget.classList.contains("up")) return;
@@ -178,6 +181,8 @@ function finishGame() {
   running = false;
   clearInterval(tickTimer);
   clearRoundTimers();
+  clearTimeout(malletTimer);
+  malletEl.classList.remove("swing");
   hideAll();
   startEl.disabled = false;
   startEl.textContent = "重新开始";

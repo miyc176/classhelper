@@ -23,7 +23,37 @@ def load_knowledge(path: Path) -> dict[str, Any]:
 
 def short(text: Any, limit: int = 58) -> str:
     value = re.sub(r"\s+", " ", str(text)).strip()
-    return value if len(value) <= limit else value[: limit - 1] + "..."
+    return value if len(value) <= limit else value[:limit].rstrip()
+
+
+def dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        cleaned = re.sub(r"\s+", " ", str(value)).strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            result.append(cleaned)
+    return result
+
+
+def explanation(point: dict[str, Any]) -> str:
+    return str(point.get("teaching_value") or point.get("evidence") or point["statement"])
+
+
+def question_prompt(point: dict[str, Any], mode: str) -> str:
+    label = object_label(point, 24)
+    source_prompt = str((point.get("assessment_prompts") or [""])[0]).strip()
+    source_prompt = re.sub(r"\s+", " ", source_prompt)
+    if 8 <= len(source_prompt) <= 48 and "..." not in source_prompt:
+        return source_prompt
+    prompts = {
+        "whack": f"下列哪一项最准确对应“{label}”？",
+        "tictactoe": f"选择与“{label}”最匹配的课程概念。",
+        "shooter": f"击毁不属于“{label}”的干扰项，保留正确概念。",
+        "puzzle": f"从 6 个拼图块中选出 4 个属于“{label}”的正确概念。",
+    }
+    return prompts.get(mode, f"请选择与“{label}”匹配的知识点。")
 
 
 def object_label(point: dict[str, Any], limit: int = 22) -> str:
@@ -103,13 +133,15 @@ def choices_for(
     compact_labels: bool = False,
 ) -> list[str]:
     correct = object_label(point) if compact_labels else str(point["statement"])
-    decoys = [
+    decoys = dedupe([
         object_label(item) if compact_labels else str(item["statement"])
         for item in points
         if item["id"] != point["id"]
-    ]
+    ])
     rng.shuffle(decoys)
-    choices = [correct, *decoys[: count - 1]]
+    choices = dedupe([correct, *decoys])[:count]
+    if len(choices) < count:
+        choices.extend(f"{point_label(point)}-{i + 1}" for i in range(count - len(choices)))
     rng.shuffle(choices)
     return choices
 
@@ -121,13 +153,13 @@ def true_false_item(point: dict[str, Any], rng: random.Random) -> dict[str, Any]
             "id": point["id"],
             "text": str(point["common_errors"][0]),
             "answer": False,
-            "why": f"课程知识点 {point['id']} 的正确表述是：{point['statement']}",
+            "why": f"正确表述是：{point['statement']}",
         }
     return {
         "id": point["id"],
         "text": str(point["statement"]),
         "answer": True,
-        "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),
+        "why": explanation(point),
     }
 
 
@@ -153,17 +185,17 @@ def build_payload(data: dict[str, Any], seed: int) -> dict[str, Any]:
                 "id": point["id"],
                 "term": point_label(point),
                 "definition": object_label(point, 24),
-                "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),
+                "why": explanation(point),
             }
             for point in memory_points
         ],
         "tictactoe": [
             {
                 "id": point["id"],
-                "prompt": str((point.get("assessment_prompts") or [f"{point['id']} 的正确表述是什么？"])[0]),
-                "answer": str(point["statement"]),
-                "choices": choices_for(point, all_points, rng),
-                "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),
+                "prompt": question_prompt(point, "tictactoe"),
+                "answer": object_label(point),
+                "choices": choices_for(point, all_points, rng, compact_labels=True),
+                "why": explanation(point),
             }
             for point in ttt_points
         ],
@@ -171,12 +203,12 @@ def build_payload(data: dict[str, Any], seed: int) -> dict[str, Any]:
         "shooter": [
             {
                 "id": point["id"],
-                "prompt": str((point.get("assessment_prompts") or [f"击落不符合 {point['id']} 的选项。"])[0]),
+                "prompt": question_prompt(point, "shooter"),
                 "answer": object_label(point),
                 "choices": choices_for(point, all_points, rng, compact_labels=True),
-                "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),
+                "why": explanation(point),
             }
-            for point in ttt_points
+            for point in shooter_points
         ],
         "puzzle": [
             {
@@ -184,7 +216,7 @@ def build_payload(data: dict[str, Any], seed: int) -> dict[str, Any]:
                 "type": str(point.get("type", "concept")),
                 "label": object_label(point, 16),
                 "text": str(point.get("type", "concept")),
-                "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),
+                "why": explanation(point),
             }
             for point in puzzle_points
         ],

@@ -35,7 +35,7 @@ def main() -> int:
     mode = args.mode
     content = payload_set[mode]
     if mode == "puzzle":
-        content = content[:6]
+        content = content[:12]
 
     covered_ids = [str(item["id"]) for item in content]
     payload = {
@@ -43,7 +43,7 @@ def main() -> int:
         "mode": mode,
         "coverage": list(dict.fromkeys(covered_ids)),
         "items": content,
-        "total": 4 if mode == "puzzle" else (9 if mode == "tictactoe" else len(content)),
+        "total": max(4, (len(content) // 6) * 4) if mode == "puzzle" else (9 if mode == "tictactoe" else len(content)),
     }
 
     out = Path(args.out).resolve()

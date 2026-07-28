@@ -31,6 +31,7 @@ Required output contract:
 - Every core interactive object must carry course knowledge: moles, cards, cells, gates, enemies, puzzle pieces, labels, or targets.
 - Feedback must explain the answer using source-derived teaching value, evidence, or the knowledge statement.
 - The first viewport must be playable, not a landing page or instructions-only page.
+- Question text and options must be rewritten into clear, answerable classroom items. Do not dump raw knowledge statements into answer objects when a short complete label or targeted prompt is needed.
 
 Use the relevant file skills when available:
 
@@ -126,6 +127,7 @@ Before coding, map each target knowledge point to a mechanic:
 - Misconceptions: diagnose-the-error or choose-the-fix rounds.
 - Classic arcade requests: read `references/classic-game-patterns.md`; map whack-a-mole to single-choice recall, memory cards to term-definition pairs, tic-tac-toe to answer-gated moves, flappy bird to true/false judgment, thunder shooter to classification, and puzzles to knowledge organization.
 - Preserve the original control loop of a recognizable classic game whenever possible. Embed knowledge into targets, gates, collision outcomes, enemy rules, and spatial pieces; do not replace movement, aiming, shooting, collision, or assembly with ordinary answer buttons.
+- Convert knowledge points into explicit assessment items before rendering: each prompt should ask for one thing, the correct answer should be a complete concise label, distractors should be plausible same-course alternatives, and feedback should carry the fuller explanation.
 
 Every generated game must include:
 
@@ -138,6 +140,7 @@ Every generated game must include:
 - A reset/retry path and visible progress/state.
 - For classic games, each mole/card/cell/gate/enemy/puzzle piece must carry one or more knowledge ids and must not be decorative-only.
 - For polished classic games, use the matching standalone template as the canonical format: `assets/whack-a-mole-template/` for whack-a-mole and `assets/standalone-classic-template/` for memory, tic-tac-toe, flappy, shooter, and puzzle. Improve shared template files when quality is insufficient, then reuse them across courses through generated data.
+- Do not use ellipsis as a substitute for fitting text on cards, moles, enemies, or puzzle pieces. Generate shorter complete labels and keep long statements in feedback or explanations.
 
 ## Quality Gates
 
@@ -157,6 +160,7 @@ If the system `python` is unavailable, use the bundled Codex Python runtime. Als
 - Interactions work after reset and across at least two rounds.
 - Scoring and answer logic match the extracted knowledge.
 - Text on game objects fits inside its object frame at desktop and mobile sizes. For whack-a-mole, answer labels must be short, complete labels on the mole sign; keep longer explanations in feedback.
+- The generated prompts, correct answers, and distractors are understandable without seeing the original slide. Reject vague stems such as "which is correct" when the visible options do not clearly define the task.
 
 Interaction smoke examples:
 

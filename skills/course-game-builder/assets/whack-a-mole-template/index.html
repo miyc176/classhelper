@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>知识打地鼠</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="game">
+    <header class="marquee">
+      <div class="marquee-bulbs" aria-hidden="true"></div>
+      <p>KNOWLEDGE ARCADE</p>
+      <h1 id="game-title">知识打地鼠</h1>
+      <div class="marquee-bulbs bottom" aria-hidden="true"></div>
+    </header>
+
+    <section class="cabinet" aria-label="知识打地鼠游戏机">
+      <div class="hud">
+        <div><span>得分</span><strong id="score">0000</strong></div>
+        <div class="combo"><span>连击</span><strong id="combo">x1</strong></div>
+        <div><span>时间</span><strong id="time">60</strong></div>
+      </div>
+
+      <div class="mission">
+        <span id="round-label">第 1 题</span>
+        <h2 id="prompt">准备开始</h2>
+        <p id="instruction">击中写有正确答案的地鼠，避开错误选项。</p>
+      </div>
+
+      <div class="field" id="field">
+        <div class="cloud cloud-a"></div>
+        <div class="cloud cloud-b"></div>
+        <div class="hills"></div>
+        <div class="holes" id="holes" aria-label="九个地鼠洞"></div>
+        <div class="mallet" id="mallet" aria-hidden="true">
+          <span class="mallet-head"></span><span class="mallet-handle"></span>
+        </div>
+      </div>
+
+      <div class="status" aria-live="polite">
+        <div class="lives" id="lives" aria-label="剩余机会"></div>
+        <p id="feedback">按“开始游戏”，地鼠会随机出现并很快缩回洞里。</p>
+        <button id="start" type="button">开始游戏</button>
+      </div>
+    </section>
+
+    <dialog id="result">
+      <div class="result-badge">ROUND CLEAR</div>
+      <h2 id="result-title">本轮结束</h2>
+      <p id="result-summary"></p>
+      <button id="replay" type="button">再玩一次</button>
+    </dialog>
+  </main>
+  <script src="./game-data.js"></script>
+  <script src="./game.js"></script>
+</body>
+</html>

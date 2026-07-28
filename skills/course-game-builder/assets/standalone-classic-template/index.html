@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>知识小游戏</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main id="app" class="game-shell">
+    <header class="topbar">
+      <div><p id="kicker">KNOWLEDGE GAME</p><h1 id="title">知识小游戏</h1></div>
+      <div class="hud"><span>得分<strong id="score">0000</strong></span><span>进度<strong id="progress">0/0</strong></span></div>
+    </header>
+    <section class="mission"><span id="mission-tag">任务</span><h2 id="prompt">准备开始</h2><p id="hint"></p></section>
+    <section id="stage" class="stage"></section>
+    <footer class="footer"><p id="feedback" aria-live="polite">点击开始进入挑战。</p><button id="action" type="button">开始游戏</button></footer>
+  </main>
+  <dialog id="quiz-dialog"><div class="dialog-inner"><p class="dialog-tag">ANSWER TO MOVE</p><h2 id="dialog-prompt"></h2><div id="dialog-options"></div><button id="dialog-close" type="button">取消</button></div></dialog>
+  <script src="./game-data.js"></script>
+  <script src="./game.js"></script>
+</body>
+</html>

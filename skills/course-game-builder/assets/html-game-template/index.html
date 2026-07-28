@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Course Mini Game</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="game-board" aria-labelledby="game-title">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Mini Game</p>
+            <h1 id="game-title">Knowledge Match</h1>
+          </div>
+          <div class="score" aria-live="polite">
+            <span id="progress">0 / 0</span>
+            <span id="score">0 pts</span>
+          </div>
+        </div>
+
+        <div class="prompt" id="prompt"></div>
+        <div class="choices" id="choices"></div>
+        <div class="feedback" id="feedback" aria-live="polite"></div>
+
+        <div class="actions">
+          <button id="next" type="button">Next</button>
+          <button id="reset" type="button">Reset</button>
+        </div>
+      </section>
+    </main>
+    <script src="./script.js"></script>
+  </body>
+</html>

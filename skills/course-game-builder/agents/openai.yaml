@@ -1,0 +1,7 @@
+interface:
+  display_name: "Course Game Builder"
+  short_description: "Extract course knowledge and generate validated HTML classroom games."
+  default_prompt: "Use $course-game-builder to extract source-traceable knowledge from my course materials, generate polished HTML teaching games, and validate that they are playable."
+
+policy:
+  allow_implicit_invocation: true

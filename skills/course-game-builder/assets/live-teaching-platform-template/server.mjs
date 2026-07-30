@@ -94,7 +94,10 @@ async function serveStatic(request, response) {
     ".jpg": "image/jpeg",
     ".svg": "image/svg+xml",
   };
-  response.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
+  response.writeHead(200, {
+    "Content-Type": types[ext] || "application/octet-stream",
+    "Cache-Control": "no-store",
+  });
   response.end(await readFile(filePath));
 }
 

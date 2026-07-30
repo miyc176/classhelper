@@ -246,10 +246,6 @@ function shell(content) {
         <h1>${esc(DATA.platformTitle || DATA.title)}</h1>
         <p>${esc(DATA.platformSubtitle || DATA.subtitle)}</p>
       </div>
-      <div class="role-switch">
-        <a class="${role === "host" ? "active" : ""}" href="${appUrl("", "host")}">老师端</a>
-        <a class="${role === "player" ? "active" : ""}" href="${appUrl("", "player")}">学生端</a>
-      </div>
     </header>
     ${content}
   `;

@@ -41,22 +41,6 @@ button { cursor: pointer; }
   letter-spacing: 2px;
   text-transform: uppercase;
 }
-.role-switch {
-  display: flex;
-  gap: 8px;
-  padding: 5px;
-  background: #edf2f8;
-  border: 1px solid var(--line);
-}
-.role-switch a {
-  min-width: 86px;
-  padding: 10px 12px;
-  color: var(--muted);
-  text-align: center;
-  text-decoration: none;
-  font-weight: 800;
-}
-.role-switch a.active { color: white; background: var(--ink); }
 .host-layout, .player-layout { width: min(1180px, calc(100% - 28px)); margin: 22px auto 86px; }
 .back-link {
   display: inline-flex;
@@ -352,8 +336,6 @@ button { cursor: pointer; }
 @media (max-width: 520px) {
   .host-layout, .player-layout { width: calc(100% - 16px); margin-top: 10px; }
   .stats-strip { grid-template-columns: 1fr; }
-  .role-switch { width: 100%; }
-  .role-switch a { flex: 1; }
   .group-picker { grid-template-columns: 1fr; }
   .bid-control { grid-template-columns: 46px 1fr 46px 44px; }
   .submit-bar { bottom: 8px; }

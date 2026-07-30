@@ -1,6 +1,6 @@
 ---
 name: course-game-builder
-description: Extract complete, source-traceable course knowledge from teaching materials and build polished HTML mini-games for classroom learning. Use when Codex is asked to process PPT/PPTX, PDF, DOCX, images, screenshots, scans, handouts, or courseware; recover knowledge from both text and visual content; create teaching games, interactive exercises, quizzes, simulations, matching games, sorting games, or review activities; and validate the generated HTML game quality before delivery.
+description: Extract complete, source-traceable course knowledge from teaching materials and build polished HTML mini-games or live teaching assistant pages for classroom learning. Use when Codex is asked to process PPT/PPTX, PDF, DOCX, images, screenshots, scans, handouts, or courseware; recover knowledge from both text and visual content; create teaching games, multiplayer classroom activities, evaluation-set auctions, interactive exercises, quizzes, simulations, matching games, sorting games, or review activities; and validate the generated HTML game quality before delivery.
 ---
 
 # Course Game Builder
@@ -20,7 +20,9 @@ Default behavior:
 - If the user asks for classic, arcade, creative, polished, or game-like outputs, prefer the fixed standalone polished templates and replace only generated data files unless a template bug is verified.
 - If the user asks for a specific classic game, generate one standalone HTML game for that mechanic.
 - If the user asks for multiple game types, generate separate standalone folders. If they explicitly ask for one HTML collection or launcher, create a fresh launcher that links to the standalone games; do not use an old shared arcade shell.
+- If the user asks for a teaching assistant page, classroom platform, live classroom interaction, multiplayer activity, voting, auction, or shared decision activity, read `references/live-teaching-platform.md` and use `scripts/build_live_teaching_platform.py`.
 - Keep outputs self-contained and offline-friendly; do not add CDN or internet dependencies without approval.
+- For local multiplayer outputs, keep the browser assets self-contained and use a lightweight local service unless the user explicitly asks for cloud hosting.
 - Do not deliver on appearance alone. Run static validation and a browser smoke check for every interactive HTML game where tooling is available.
 - After changing any classic template, generator, or quality rule, run `scripts/validate_classic_template_set.py` with a representative `knowledge.json`.
 
@@ -49,7 +51,7 @@ Use the relevant file skills when available:
 4. Build a source-traceable knowledge model using `references/knowledge-schema.md`.
 5. Run a coverage audit: every source page/slide/image must have either extracted knowledge points or an explicit "no instructional content" note.
 6. Design games from learning objectives, not from convenience. Read `references/game-patterns.md` before choosing mechanics for a new course/domain.
-7. Build one or more self-contained HTML mini-games. Use `scripts/build_game_from_knowledge.py` for a reliable baseline game. When the user asks for creative, classic, arcade, or polished gameplay, read `references/classic-game-patterns.md`. Default to one standalone HTML game per classic mechanic. For whack-a-mole, use `scripts/build_whack_a_mole.py`, which copies `assets/whack-a-mole-template/` and replaces only `game-data.js`. For memory, tic-tac-toe, flappy, shooter, and puzzle, use `scripts/build_standalone_classic.py`, which copies `assets/standalone-classic-template/` and replaces only `game-data.js`.
+7. Build one or more self-contained HTML mini-games or a live teaching assistant page. Use `scripts/build_game_from_knowledge.py` for a reliable baseline game. When the user asks for creative, classic, arcade, or polished gameplay, read `references/classic-game-patterns.md`. Default to one standalone HTML game per classic mechanic. For whack-a-mole, use `scripts/build_whack_a_mole.py`, which copies `assets/whack-a-mole-template/` and replaces only `game-data.js`. For memory, tic-tac-toe, flappy, shooter, and puzzle, use `scripts/build_standalone_classic.py`, which copies `assets/standalone-classic-template/` and replaces only `game-data.js`. For teaching platforms, live multiplayer, or golden sample auction, use `scripts/build_live_teaching_platform.py`, which copies `assets/live-teaching-platform-template/` and replaces only `data.js`.
 8. Validate with `scripts/validate_html_game.py`, then run `scripts/browser_smoke_check.mjs` when the game uses JavaScript, layout, animation, drag/drop, canvas, or responsive UI. For classic games, also perform at least one real interaction smoke test for the core mechanic when Playwright is available.
 9. Deliver the game files plus a concise coverage report: source coverage, knowledge-point coverage, game mapping, validation results, and any uncertainties.
 
@@ -81,6 +83,18 @@ Generate any other standalone classic game with `memory`, `tictactoe`, `flappy`,
 python scripts/build_standalone_classic.py path\to\knowledge.json --mode memory --out path\to\memory-game --title "Course Memory" --force
 ```
 
+Generate the live teaching platform with golden sample auction:
+
+```powershell
+python scripts/build_live_teaching_platform.py path\to\knowledge.json --out path\to\live-platform --title "黄金样本拍卖" --force
+```
+
+Run the local multiplayer service:
+
+```powershell
+node path\to\live-platform\server.mjs --host=0.0.0.0 --port=8787
+```
+
 Preserve the fixed standalone visual shell unless the user explicitly asks for a redesign. To adapt a new course, regenerate `game-data.js` from `knowledge.json`; do not rewrite `index.html`, `styles.css`, or `game.js` by hand unless a validation issue requires a template fix. If a single collection page is requested, build it as a launcher around generated standalone games rather than merging mechanics into one shared dashboard.
 
 Mode selection shortcuts:
@@ -91,6 +105,7 @@ Mode selection shortcuts:
 - `flappy`: use `--mode flappy`; best for true/false, misconceptions, compatibility, and rule judgment.
 - `shooter`: use `--mode shooter`; best for eliminating wrong options while preserving the correct answer.
 - `puzzle`: use `--mode puzzle`; best for organizing related concepts into a small spatial structure.
+- `golden-sample-auction`: use `scripts/build_live_teaching_platform.py`; best for evaluation-set construction, shared prioritization, and forcing participants to trade off scarce review budget.
 
 Validate:
 
@@ -126,6 +141,7 @@ Before coding, map each target knowledge point to a mechanic:
 - Diagrams: label placement, hotspot identification, relationship tracing.
 - Misconceptions: diagnose-the-error or choose-the-fix rounds.
 - Classic arcade requests: read `references/classic-game-patterns.md`; map whack-a-mole to single-choice recall, memory cards to term-definition pairs, tic-tac-toe to answer-gated moves, flappy bird to true/false judgment, thunder shooter to classification, and puzzles to knowledge organization.
+- Live classroom requests: read `references/live-teaching-platform.md`; map multiplayer prioritization, voting, auction, shared review, and evaluation-set construction into a host screen plus participant-device flow.
 - Preserve the original control loop of a recognizable classic game whenever possible. Embed knowledge into targets, gates, collision outcomes, enemy rules, and spatial pieces; do not replace movement, aiming, shooting, collision, or assembly with ordinary answer buttons.
 - Convert knowledge points into explicit assessment items before rendering: each prompt should ask for one thing, the correct answer should be a complete concise label, distractors should be plausible same-course alternatives, and feedback should carry the fuller explanation.
 
@@ -192,11 +208,13 @@ python scripts/validate_classic_template_set.py path\to\knowledge.json --out pat
 - `assets/html-game-template/`: standalone HTML/CSS/JS template with knowledge coverage metadata.
 - `assets/whack-a-mole-template/`: standalone arcade-cabinet whack-a-mole template with timed pop/hide, mallet feedback, combo, lives, and course answers on the moles.
 - `assets/standalone-classic-template/`: standalone engine with separate visual identities and mechanics for memory, tic-tac-toe, flappy judgment, shooter, and knowledge puzzle outputs.
+- `assets/live-teaching-platform-template/`: local multiplayer teaching assistant platform with host and participant roles, SSE live updates, and a golden sample auction activity.
 - `scripts/inventory_materials.py`: local material inventory and text/embedded-image extraction for PPTX, PDF, DOCX, text, Markdown, and standalone images.
 - `scripts/build_game_from_knowledge.py`: deterministic baseline HTML game generator from `knowledge.json`.
 - `scripts/classic_payload.py`: shared deterministic data shaping helpers for standalone classic game generators.
 - `scripts/build_whack_a_mole.py`: deterministic standalone whack-a-mole generator and the preferred default for whack-a-mole requests.
 - `scripts/build_standalone_classic.py`: deterministic generator for the five other independent classic game formats.
+- `scripts/build_live_teaching_platform.py`: deterministic generator for the local multiplayer teaching assistant platform and golden sample auction.
 - `scripts/validate_html_game.py`: static validator for required game structure, local asset references, accessibility basics, and declared knowledge coverage.
 - `scripts/validate_classic_template_set.py`: deterministic generation and static validation check for whack-a-mole, memory, tic-tac-toe, flappy, shooter, and puzzle templates.
 - `scripts/browser_smoke_check.mjs`: Playwright smoke test for browser runtime errors, desktop/mobile rendering, screenshots, and basic interaction presence.

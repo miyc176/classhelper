@@ -241,13 +241,33 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 404, { error: "参会人不存在，请重新加入。" });
         return;
       }
-      const bids = Object.fromEntries(
-        Object.entries(body.bids || {}).map(([key, value]) => [key, Math.max(0, Number(value || 0))])
-      );
-      const budget = Number(activityData.budget || 100);
+      if (!body.bids || typeof body.bids !== "object" || Array.isArray(body.bids)) {
+        sendJson(response, 400, { error: "投币数据格式无效。" });
+        return;
+      }
+      const candidateIds = new Set((activityData.candidates || []).map((candidate) => String(candidate.id)));
+      const budget = Math.max(1, Number(activityData.budget ?? 100));
+      const bidStep = Math.max(1, Number(activityData.bidStep ?? 5));
+      const bids = {};
+      for (const [key, rawValue] of Object.entries(body.bids)) {
+        const value = Number(rawValue);
+        if (!candidateIds.has(key)) {
+          sendJson(response, 400, { error: "投币数据包含未知候选项。" });
+          return;
+        }
+        if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > budget || value % bidStep !== 0) {
+          sendJson(response, 400, { error: `每项金币必须是 0 到 ${budget} 之间、且以 ${bidStep} 为步长的整数。` });
+          return;
+        }
+        bids[key] = value;
+      }
       const used = Object.values(bids).reduce((sum, value) => sum + value, 0);
       if (used > budget) {
         sendJson(response, 400, { error: `金币不能超过 ${budget}。` });
+        return;
+      }
+      if (used !== budget) {
+        sendJson(response, 400, { error: `请分配完全部 ${budget} 金币后再提交。` });
         return;
       }
       participant.bids = bids;

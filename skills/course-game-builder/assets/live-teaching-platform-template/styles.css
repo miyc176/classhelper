@@ -21,6 +21,10 @@ body {
 }
 button, input { font: inherit; }
 button { cursor: pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible {
+  outline: 3px solid rgba(106,109,242,.48);
+  outline-offset: 3px;
+}
 .app-shell { min-height: 100vh; }
 .topbar {
   display: flex;
@@ -260,6 +264,20 @@ button { cursor: pointer; }
 .wallet h2 { margin: 4px 0; font-size: clamp(26px, 5vw, 42px); }
 .wallet p { margin: 0; color: var(--muted); }
 .wallet button { min-height: 42px; padding: 0 14px; }
+.budget-meter {
+  width: min(460px, 100%);
+  height: 10px;
+  margin-top: 14px;
+  overflow: hidden;
+  background: #e9eef5;
+}
+.budget-meter i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+  transition: width .16s ease;
+}
 .home-wallet { align-items: stretch; }
 .bid-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .bid-card {
@@ -288,7 +306,13 @@ button { cursor: pointer; }
   border: 0;
   font-weight: 900;
 }
+.bid-control button:disabled {
+  cursor: not-allowed;
+  color: #8c98a8;
+  background: #e7ecf2;
+}
 .bid-control input { width: 100%; accent-color: var(--teal); }
+.bid-control input:disabled { cursor: not-allowed; opacity: .48; }
 .bid-control output { text-align: right; font-weight: 900; }
 .submit-bar {
   position: fixed;
@@ -338,5 +362,17 @@ button { cursor: pointer; }
   .stats-strip { grid-template-columns: 1fr; }
   .group-picker { grid-template-columns: 1fr; }
   .bid-control { grid-template-columns: 46px 1fr 46px 44px; }
-  .submit-bar { bottom: 8px; }
+  .wallet { align-items: flex-start; flex-direction: column; }
+  .wallet button { width: 100%; }
+  .bid-card { padding: 14px; }
+  .bid-head { align-items: flex-start; }
+  .bid-head strong { font-size: 18px; }
+  .submit-bar {
+    bottom: 8px;
+    min-height: 58px;
+    padding: 8px;
+    font-size: 12px;
+  }
+  .submit-bar span { min-width: 0; line-height: 1.35; }
+  .submit-bar button { min-width: 116px; min-height: 42px; padding: 0 12px; }
 }

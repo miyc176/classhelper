@@ -32,7 +32,7 @@ Required mechanics:
 - Each participant receives a fixed budget, default 100 virtual coins.
 - Each participant must join through the platform home page and receive a group/member number before bidding.
 - Show 8-10 candidate sample classes on the host screen and participant screen.
-- Participants allocate coins across candidates. Total allocation must not exceed the budget.
+- Participants allocate all coins across candidates. Client controls must never show a negative balance, and the server must reject under-budget, over-budget, unknown, negative, fractional, or off-step allocations.
 - The host can start, lock, reveal, and reset the session.
 - The host screen shows live totals, participant count, submitted count, bidders per candidate, and final top-N winners.
 - Candidate cards must include title, scenario description, representative example, selection value, and risk if omitted.
@@ -88,3 +88,4 @@ For classrooms with many participant devices, isolate each page from unrelated p
 - Verify lock prevents further participant submission.
 - Verify reveal highlights top-N candidates.
 - Verify reset clears participants and returns status to setup.
+- After changing the live platform template, run `scripts/test_live_teaching_platform.mjs` against an isolated local service. It verifies client-side budget caps, server-side bid validation, double-submit protection, lock behavior, and desktop/mobile layout.

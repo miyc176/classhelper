@@ -6,6 +6,7 @@ window.LIVE_TEACHING_DATA = {
   sessionCode: "GOLD",
   activity: "golden-sample-auction",
   budget: 100,
+  bidStep: 5,
   topN: 5,
   groups: [
     { id: "group_1", name: "第 1 组" },

@@ -13,8 +13,12 @@ let renderPending = false;
 let pollTimer = null;
 let eventRetryTimer = null;
 let loadingState = false;
+let submittingBids = false;
 
 const AUCTION_APP = "golden-sample-auction";
+const BUDGET = Math.max(1, Number(DATA.budget ?? 100));
+const BID_STEP = Math.max(1, Number(DATA.bidStep ?? 5));
+window.GAME_KNOWLEDGE_COVERAGE = Array.isArray(DATA.knowledgeCoverage) ? DATA.knowledgeCoverage : [];
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;",
@@ -201,7 +205,7 @@ function money(value) {
 }
 
 function totalDraft() {
-  return Object.values(draftBids).reduce((sum, value) => sum + Number(value || 0), 0);
+  return DATA.candidates.reduce((sum, candidate) => sum + Number(draftBids[candidate.id] || 0), 0);
 }
 
 function statusLabel(status) {
@@ -211,6 +215,14 @@ function statusLabel(status) {
     locked: "已锁定",
     revealed: "已揭晓",
   }[status] || status;
+}
+
+function submitActionLabel(status) {
+  if (submittingBids) return "正在提交...";
+  if (status === "open") return player?.submittedAt ? "更新金币" : "提交金币";
+  if (status === "locked") return "本轮已锁定";
+  if (status === "revealed") return "结果已公布";
+  return "等待老师开始";
 }
 
 function participantLabel(item) {
@@ -443,9 +455,10 @@ function renderHostAuction() {
 
 function renderPlayerAuction() {
   const used = totalDraft();
-  const remaining = DATA.budget - used;
-  const canSubmit = remaining >= 0 && state.status === "open";
-  const submitLabel = state.status === "open" ? (player?.submittedAt ? "更新金币" : "提交金币") : "等待老师开始";
+  const remaining = Math.max(0, BUDGET - used);
+  const canEdit = state.status === "open";
+  const canSubmit = canEdit && remaining === 0 && !submittingBids;
+  const submitLabel = submitActionLabel(state.status);
   shell(`
     <main class="player-layout">
       <a class="back-link" href="${appUrl("", "player")}">返回应用主页</a>
@@ -453,7 +466,10 @@ function renderPlayerAuction() {
         <div>
           <p class="panel-label">${esc(participantLabel(player))}</p>
           <h2 id="remaining-budget">剩余 ${money(remaining)}</h2>
-          <p>把 ${DATA.budget} 金币分配给你认为最值得进入黄金评测集的样本。</p>
+          <p>把 ${BUDGET} 金币分配给你认为最值得进入黄金评测集的样本。</p>
+          <div class="budget-meter" aria-label="金币使用进度">
+            <i id="budget-meter-fill" style="width:${BUDGET ? Math.min(100, used / BUDGET * 100) : 0}%"></i>
+          </div>
         </div>
         <button id="leave" class="ghost">重新选组</button>
       </section>
@@ -473,17 +489,17 @@ function renderPlayerAuction() {
                 <div><dt>忽略风险</dt><dd>${esc(candidate.risk)}</dd></div>
               </dl>
               <div class="bid-control">
-                <button data-step="-10" data-id="${esc(candidate.id)}">-10</button>
-                <input type="range" min="0" max="${DATA.budget}" step="5" value="${value}" data-id="${esc(candidate.id)}" />
-                <button data-step="10" data-id="${esc(candidate.id)}">+10</button>
-                <output data-output="${esc(candidate.id)}">${value}</output>
+                <button data-step="-10" data-id="${esc(candidate.id)}" aria-label="${esc(candidate.title)}减少10金币">-10</button>
+                <input type="range" min="0" max="${Math.min(BUDGET, value + remaining)}" step="${BID_STEP}" value="${value}" data-id="${esc(candidate.id)}" aria-label="${esc(candidate.title)}投币数量" ${canEdit ? "" : "disabled"} />
+                <button data-step="10" data-id="${esc(candidate.id)}" aria-label="${esc(candidate.title)}增加10金币">+10</button>
+                <output data-output="${esc(candidate.id)}" aria-live="polite">${value}</output>
               </div>
             </article>
           `;
         }).join("")}
       </section>
       <footer class="submit-bar">
-        <span id="usage-state">${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}</span>
+        <span id="usage-state">${statusLabel(state.status)} · 已用 ${used}/${BUDGET}</span>
         <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${submitLabel}</button>
       </footer>
     </main>
@@ -501,6 +517,7 @@ function renderPlayerAuction() {
     button.onclick = () => updateBid(button.dataset.id, Number(draftBids[button.dataset.id] || 0) + Number(button.dataset.step));
   });
   app.querySelector("#submit-bids").onclick = submitBids;
+  updateBudgetUi();
 }
 
 async function join(event) {
@@ -525,7 +542,12 @@ async function join(event) {
 }
 
 function updateBid(id, value) {
-  const normalized = Math.max(0, Math.min(DATA.budget, Math.round(value / 5) * 5));
+  if (state.status !== "open" || !DATA.candidates.some((candidate) => candidate.id === id)) return;
+  const current = Number(draftBids[id] || 0);
+  const otherUsed = totalDraft() - current;
+  const availableForItem = Math.max(0, BUDGET - otherUsed);
+  const requested = Number.isFinite(value) ? Math.round(value / BID_STEP) * BID_STEP : current;
+  const normalized = Math.max(0, Math.min(availableForItem, requested));
   draftBids[id] = normalized;
 
   const input = app.querySelector(`input[type=range][data-id="${CSS.escape(id)}"]`);
@@ -539,18 +561,36 @@ function updateBid(id, value) {
 
 function updateBudgetUi() {
   const used = totalDraft();
-  const remaining = DATA.budget - used;
+  const remaining = Math.max(0, BUDGET - used);
   const remainingEl = app.querySelector("#remaining-budget");
   if (remainingEl) remainingEl.textContent = `剩余 ${money(remaining)}`;
 
+  const meter = app.querySelector("#budget-meter-fill");
+  if (meter) meter.style.width = `${BUDGET ? Math.min(100, used / BUDGET * 100) : 0}%`;
+
   const usageEl = app.querySelector("#usage-state");
   const submitted = player?.submittedAt ? " · 已提交" : "";
-  if (usageEl) usageEl.textContent = `${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}${submitted}`;
+  const allocationHint = state.status === "open" && remaining > 0 ? ` · 还需分配 ${remaining}` : "";
+  if (usageEl) usageEl.textContent = `${statusLabel(state.status)} · 已用 ${used}/${BUDGET}${allocationHint}${submitted}`;
+
+  const canEdit = state.status === "open" && !submittingBids;
+  app.querySelectorAll("input[type=range][data-id]").forEach((input) => {
+    const id = input.dataset.id;
+    const current = Number(draftBids[id] || 0);
+    input.max = String(Math.min(BUDGET, current + remaining));
+    input.disabled = !canEdit;
+  });
+  app.querySelectorAll("[data-step]").forEach((button) => {
+    const id = button.dataset.id;
+    const current = Number(draftBids[id] || 0);
+    const step = Number(button.dataset.step);
+    button.disabled = !canEdit || (step < 0 ? current <= 0 : remaining <= 0);
+  });
 
   const submit = app.querySelector("#submit-bids");
   if (submit) {
-    submit.disabled = !(remaining >= 0 && state.status === "open");
-    submit.textContent = state.status === "open" ? (player?.submittedAt ? "更新金币" : "提交金币") : "等待老师开始";
+    submit.disabled = !canEdit || remaining !== 0;
+    submit.textContent = submitActionLabel(state.status);
   }
 }
 
@@ -559,18 +599,31 @@ function refreshLocalControls() {
 }
 
 async function submitBids() {
+  if (submittingBids || state.status !== "open") return;
   const used = totalDraft();
-  if (used > DATA.budget) {
+  if (used > BUDGET) {
     alert("金币不能超过预算。");
     return;
   }
-  const result = await api("/api/bid", {
-    method: "POST",
-    body: JSON.stringify({ participantId: player.id, bids: draftBids }),
-  });
-  player = result.participant;
-  sessionStorage.setItem(storageKey, JSON.stringify(player));
+  if (used !== BUDGET) {
+    alert(`请先分配完全部 ${BUDGET} 金币。`);
+    return;
+  }
+  submittingBids = true;
   updateBudgetUi();
+  try {
+    const result = await api("/api/bid", {
+      method: "POST",
+      body: JSON.stringify({ participantId: player.id, bids: draftBids }),
+    });
+    player = result.participant;
+    sessionStorage.setItem(storageKey, JSON.stringify(player));
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    submittingBids = false;
+    updateBudgetUi();
+  }
 }
 
 async function control(action) {

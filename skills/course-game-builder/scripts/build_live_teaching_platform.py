@@ -137,6 +137,7 @@ def build_payload(data: dict[str, Any], args: argparse.Namespace) -> dict[str, A
         "sessionCode": args.session_code,
         "activity": "golden-sample-auction",
         "budget": args.budget,
+        "bidStep": args.bid_step,
         "topN": args.top_n,
         "groups": build_groups(args.group_count),
         "knowledgeCoverage": [str(point.get("id")) for point in data.get("knowledge_points", []) if point.get("id")],
@@ -172,12 +173,19 @@ def main() -> int:
     parser.add_argument("--platform-subtitle", default="选择组别、进入活动、把小游戏和多人任务挂到同一主页")
     parser.add_argument("--session-code", default="GOLD")
     parser.add_argument("--budget", type=int, default=100)
+    parser.add_argument("--bid-step", type=int, default=5)
     parser.add_argument("--top-n", type=int, default=5)
     parser.add_argument("--count", type=int, default=10)
     parser.add_argument("--group-count", type=int, default=6)
     parser.add_argument("--embed-game", action="append", default=[], help="Add a launcher link as title=href.")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
+    if args.budget < 1:
+        parser.error("--budget must be at least 1")
+    if args.bid_step < 1:
+        parser.error("--bid-step must be at least 1")
+    if args.budget % args.bid_step:
+        parser.error("--budget must be divisible by --bid-step")
 
     data = load_knowledge(Path(args.knowledge_json).resolve() if args.knowledge_json else None)
     payload = build_payload(data, args)

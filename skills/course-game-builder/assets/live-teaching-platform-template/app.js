@@ -2,12 +2,15 @@ const DATA = window.LIVE_TEACHING_DATA;
 const app = document.querySelector("#app");
 const params = new URLSearchParams(location.search);
 const role = params.get("role") || "host";
+const currentApp = params.get("app") || "";
 const storageKey = `live-teaching-player-${DATA.sessionCode || DATA.activity}`;
 
 let state = null;
-let player = JSON.parse(localStorage.getItem(storageKey) || "null");
+let player = JSON.parse(sessionStorage.getItem(storageKey) || "null");
 let draftBids = {};
 let eventSource = null;
+
+const AUCTION_APP = "golden-sample-auction";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;",
@@ -34,40 +37,57 @@ function connectEvents() {
   eventSource = new EventSource("/events");
   eventSource.onmessage = (event) => {
     state = JSON.parse(event.data);
+    syncPlayer();
     render();
   };
-  eventSource.onerror = () => {
-    setTimeout(loadState, 1200);
-  };
+  eventSource.onerror = () => setTimeout(loadState, 1200);
 }
 
 async function loadState() {
   state = await api("/api/state");
-  if (player && !state.participants.some((item) => item.id === player.id)) {
-    player = null;
-    localStorage.removeItem(storageKey);
-  }
+  syncPlayer();
   render();
 }
 
-function money(value) {
-  return `${Number(value || 0).toLocaleString("zh-CN")} 金币`;
+function syncPlayer() {
+  if (!player || !state) return;
+  const fresh = state.participants.find((item) => item.id === player.id);
+  if (!fresh) {
+    player = null;
+    sessionStorage.removeItem(storageKey);
+    draftBids = {};
+    return;
+  }
+  player = { ...player, ...fresh };
+  sessionStorage.setItem(storageKey, JSON.stringify(player));
+}
+
+function navigate(nextParams) {
+  const url = new URL(location.href);
+  Object.entries(nextParams).forEach(([key, value]) => {
+    if (value === null || value === "") url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  });
+  location.href = url.pathname + url.search;
+}
+
+function appUrl(appId, nextRole = role) {
+  const url = new URL(location.href);
+  url.searchParams.set("role", nextRole);
+  if (appId) url.searchParams.set("app", appId);
+  else url.searchParams.delete("app");
+  return url.pathname + url.search;
 }
 
 function getJoinUrl() {
   const url = new URL(location.href);
   url.searchParams.set("role", "player");
+  url.searchParams.delete("app");
   return url.href;
 }
 
-function candidateTotals() {
-  if (!state) return [];
-  return DATA.candidates.map((candidate) => {
-    const total = state.participants.reduce((sum, participant) => sum + Number(participant.bids?.[candidate.id] || 0), 0);
-    const bidders = state.participants.filter((participant) => Number(participant.bids?.[candidate.id] || 0) > 0).length;
-    const average = bidders ? Math.round(total / bidders) : 0;
-    return { ...candidate, total, bidders, average };
-  }).sort((a, b) => b.total - a.total);
+function money(value) {
+  return `${Number(value || 0).toLocaleString("zh-CN")} 金币`;
 }
 
 function totalDraft() {
@@ -83,17 +103,38 @@ function statusLabel(status) {
   }[status] || status;
 }
 
+function participantLabel(item) {
+  if (!item) return "未加入";
+  return `${item.groupName} · ${item.memberNumber}号`;
+}
+
+function candidateTotals() {
+  if (!state) return [];
+  return DATA.candidates.map((candidate) => {
+    const total = state.participants.reduce((sum, participant) => sum + Number(participant.bids?.[candidate.id] || 0), 0);
+    const bidders = state.participants.filter((participant) => Number(participant.bids?.[candidate.id] || 0) > 0).length;
+    const average = bidders ? Math.round(total / bidders) : 0;
+    return { ...candidate, total, bidders, average };
+  }).sort((a, b) => b.total - a.total);
+}
+
+function groupCounts() {
+  const counts = new Map(DATA.groups.map((group) => [group.id, 0]));
+  (state?.participants || []).forEach((item) => counts.set(item.groupId, (counts.get(item.groupId) || 0) + 1));
+  return counts;
+}
+
 function shell(content) {
   app.innerHTML = `
     <header class="topbar">
       <div>
         <p class="eyebrow">LIVE TEACHING</p>
-        <h1>${esc(DATA.title)}</h1>
-        <p>${esc(DATA.subtitle)}</p>
+        <h1>${esc(DATA.platformTitle || DATA.title)}</h1>
+        <p>${esc(DATA.platformSubtitle || DATA.subtitle)}</p>
       </div>
       <div class="role-switch">
-        <a class="${role === "host" ? "active" : ""}" href="?role=host">主持端</a>
-        <a class="${role === "player" ? "active" : ""}" href="?role=player">参会端</a>
+        <a class="${role === "host" ? "active" : ""}" href="${appUrl("", "host")}">老师端</a>
+        <a class="${role === "player" ? "active" : ""}" href="${appUrl("", "player")}">学生端</a>
       </div>
     </header>
     ${content}
@@ -105,26 +146,150 @@ function render() {
     shell(`<main class="loading">正在连接课堂互动服务...</main>`);
     return;
   }
-  if (role === "player") renderPlayer();
-  else renderHost();
+  if (role === "player" && currentApp === AUCTION_APP && player) renderPlayerAuction();
+  else if (role === "host" && currentApp === AUCTION_APP) renderHostAuction();
+  else if (role === "player") renderPlayerHome();
+  else renderHostHome();
 }
 
-function renderHost() {
+function applicationCards(nextRole) {
+  return `
+    <section class="app-grid">
+      ${DATA.applications.map((item) => `
+        <a class="app-card ${item.id === AUCTION_APP ? "primary-app" : ""}" href="${esc(item.href || appUrl(item.id, nextRole))}">
+          <span>${esc(item.kicker || "APP")}</span>
+          <strong>${esc(item.title)}</strong>
+          <p>${esc(item.description)}</p>
+        </a>
+      `).join("")}
+    </section>
+  `;
+}
+
+function groupRoster() {
+  const groups = DATA.groups.map((group) => ({
+    ...group,
+    members: state.participants.filter((item) => item.groupId === group.id).sort((a, b) => a.memberNumber - b.memberNumber),
+  }));
+  return `
+    <section class="group-roster">
+      ${groups.map((group) => `
+        <article>
+          <h3>${esc(group.name)} <span>${group.members.length} 人</span></h3>
+          <div class="member-list">
+            ${group.members.length ? group.members.map((member) => `
+              <span>${member.memberNumber}号 ${esc(member.nickname || member.name || "")}</span>
+            `).join("") : `<small>等待加入</small>`}
+          </div>
+        </article>
+      `).join("")}
+    </section>
+  `;
+}
+
+function renderHostHome() {
+  const submitted = state.participants.filter((item) => item.submittedAt).length;
+  shell(`
+    <main class="host-layout">
+      <section class="screen-panel hero-panel">
+        <div>
+          <p class="panel-label">课堂主页 ${esc(DATA.sessionCode || "LIVE")}</p>
+          <h2>选择一个教学应用</h2>
+          <p>学生先在主页选择组别，系统会按加入顺序自动分配组内序号。老师端可以从这里进入任意教学活动。</p>
+        </div>
+        <div class="join-box">
+          <span>学生入口</span>
+          <strong>${esc(getJoinUrl())}</strong>
+          <small>同一 Wi-Fi 下用手机打开。每个学生选择组别后会自动获得 1号、2号、3号...</small>
+        </div>
+      </section>
+      <section class="stats-strip">
+        <div><strong>${state.participants.length}</strong><span>已加入学生</span></div>
+        <div><strong>${submitted}</strong><span>已提交拍卖</span></div>
+        <div><strong>${DATA.groups.length}</strong><span>可选组别</span></div>
+        <div><strong>${DATA.applications.length}</strong><span>可用应用</span></div>
+      </section>
+      ${applicationCards("host")}
+      ${groupRoster()}
+    </main>
+  `);
+}
+
+function renderPlayerHome() {
+  if (!player) {
+    const counts = groupCounts();
+    shell(`
+      <main class="player-layout">
+        <section class="screen-panel join-panel">
+          <p class="panel-label">加入课堂</p>
+          <h2>先选择你的组别</h2>
+          <p>系统会根据加入先后，自动给你分配组内序号，例如“第 1 组 · 1号”。</p>
+          <form id="join-form">
+            <label>昵称，可不填</label>
+            <input name="nickname" maxlength="24" autocomplete="name" placeholder="例如：小明 / 设备名" />
+            <input type="hidden" name="groupId" required />
+            <div class="group-picker">
+              ${DATA.groups.map((group) => `
+                <button type="button" data-group="${esc(group.id)}">
+                  <strong>${esc(group.name)}</strong>
+                  <span>当前 ${counts.get(group.id) || 0} 人</span>
+                </button>
+              `).join("")}
+            </div>
+            <button type="submit">进入课堂主页</button>
+          </form>
+        </section>
+      </main>
+    `);
+    const form = app.querySelector("#join-form");
+    app.querySelectorAll("[data-group]").forEach((button) => {
+      button.onclick = () => {
+        form.groupId.value = button.dataset.group;
+        app.querySelectorAll("[data-group]").forEach((item) => item.classList.toggle("selected", item === button));
+      };
+    });
+    form.onsubmit = join;
+    return;
+  }
+
+  shell(`
+    <main class="player-layout">
+      <section class="wallet home-wallet">
+        <div>
+          <p class="panel-label">${esc(participantLabel(player))}</p>
+          <h2>课堂应用主页</h2>
+          <p>${esc(player.nickname || player.name || "同学")}，你可以从这里进入老师开启的活动。</p>
+        </div>
+        <button id="leave" class="ghost">重新选组</button>
+      </section>
+      ${applicationCards("player")}
+    </main>
+  `);
+  app.querySelector("#leave").onclick = () => {
+    player = null;
+    sessionStorage.removeItem(storageKey);
+    draftBids = {};
+    render();
+  };
+}
+
+function renderHostAuction() {
   const totals = candidateTotals();
   const submitted = state.participants.filter((item) => item.submittedAt).length;
   const top = totals.slice(0, DATA.topN || 5);
   shell(`
     <main class="host-layout">
+      <a class="back-link" href="${appUrl("", "host")}">返回应用主页</a>
       <section class="screen-panel hero-panel">
         <div>
           <p class="panel-label">课堂口令 ${esc(DATA.sessionCode || "LIVE")}</p>
           <h2>${esc(DATA.title)}</h2>
-          <p>每位参会人有 ${DATA.budget} 个虚拟金币。请把金币投给最值得进入黄金评测集的候选样本。</p>
+          <p>每位学生有 ${DATA.budget} 个虚拟金币。请把金币投给最值得进入黄金评测集的候选样本。</p>
         </div>
         <div class="join-box">
-          <span>参会入口</span>
+          <span>学生入口</span>
           <strong>${esc(getJoinUrl())}</strong>
-          <small>同一 Wi-Fi 下用手机打开。若打不开，检查电脑 IP、端口和防火墙。</small>
+          <small>学生先选组别并获得组内序号，再进入拍卖应用。</small>
         </div>
       </section>
 
@@ -158,13 +323,7 @@ function renderHost() {
           </article>
         `).join("")}
       </section>
-
-      ${DATA.embeddedGames?.length ? `
-        <section class="embedded-games">
-          <h2>可嵌入活动</h2>
-          ${DATA.embeddedGames.map((game) => `<a href="${esc(game.href)}">${esc(game.title)}</a>`).join("")}
-        </section>
-      ` : ""}
+      ${groupRoster()}
     </main>
   `);
   app.querySelectorAll("[data-action]").forEach((button) => {
@@ -172,37 +331,20 @@ function renderHost() {
   });
 }
 
-function renderPlayer() {
-  if (!player) {
-    shell(`
-      <main class="player-layout">
-        <section class="screen-panel join-panel">
-          <p class="panel-label">加入课堂</p>
-          <h2>${esc(DATA.title)}</h2>
-          <form id="join-form">
-            <label>你的名字或小组名</label>
-            <input name="name" maxlength="24" autocomplete="name" placeholder="例如：第 3 组" required />
-            <button type="submit">进入拍卖</button>
-          </form>
-        </section>
-      </main>
-    `);
-    app.querySelector("#join-form").onsubmit = join;
-    return;
-  }
-
+function renderPlayerAuction() {
   const used = totalDraft();
   const remaining = DATA.budget - used;
   const canSubmit = remaining >= 0 && state.status === "open";
   shell(`
     <main class="player-layout">
+      <a class="back-link" href="${appUrl("", "player")}">返回应用主页</a>
       <section class="wallet">
         <div>
-          <p class="panel-label">${esc(player.name)}</p>
+          <p class="panel-label">${esc(participantLabel(player))}</p>
           <h2>剩余 ${money(remaining)}</h2>
           <p>把 ${DATA.budget} 金币分配给你认为最值得进入黄金评测集的样本。</p>
         </div>
-        <button id="leave" class="ghost">换人</button>
+        <button id="leave" class="ghost">重新选组</button>
       </section>
       <section class="bid-list">
         ${DATA.candidates.map((candidate) => {
@@ -231,15 +373,15 @@ function renderPlayer() {
       </section>
       <footer class="submit-bar">
         <span>${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}</span>
-        <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${state.status === "open" ? "提交金币" : "等待主持人开始"}</button>
+        <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${state.status === "open" ? "提交金币" : "等待老师开始"}</button>
       </footer>
     </main>
   `);
   app.querySelector("#leave").onclick = () => {
     player = null;
-    localStorage.removeItem(storageKey);
+    sessionStorage.removeItem(storageKey);
     draftBids = {};
-    render();
+    navigate({ role: "player", app: "" });
   };
   app.querySelectorAll("input[type=range]").forEach((input) => {
     input.oninput = () => updateBid(input.dataset.id, Number(input.value));
@@ -253,19 +395,26 @@ function renderPlayer() {
 async function join(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
+  if (!formData.get("groupId")) {
+    alert("请先选择组别。");
+    return;
+  }
   const result = await api("/api/join", {
     method: "POST",
-    body: JSON.stringify({ name: formData.get("name") }),
+    body: JSON.stringify({
+      groupId: formData.get("groupId"),
+      nickname: formData.get("nickname"),
+    }),
   });
   player = result.participant;
   draftBids = { ...(player.bids || {}) };
-  localStorage.setItem(storageKey, JSON.stringify(player));
+  sessionStorage.setItem(storageKey, JSON.stringify(player));
   await loadState();
 }
 
 function updateBid(id, value) {
   draftBids[id] = Math.max(0, Math.min(DATA.budget, Math.round(value / 5) * 5));
-  renderPlayer();
+  renderPlayerAuction();
 }
 
 async function submitBids() {
@@ -279,12 +428,12 @@ async function submitBids() {
     body: JSON.stringify({ participantId: player.id, bids: draftBids }),
   });
   player = result.participant;
-  localStorage.setItem(storageKey, JSON.stringify(player));
+  sessionStorage.setItem(storageKey, JSON.stringify(player));
   await loadState();
 }
 
 async function control(action) {
-  if (action === "reset" && !confirm("确定重置本局？所有参会人投入都会清空。")) return;
+  if (action === "reset" && !confirm("确定重置本局？所有学生身份和投入都会清空。")) return;
   await api("/api/control", { method: "POST", body: JSON.stringify({ action }) });
   await loadState();
 }

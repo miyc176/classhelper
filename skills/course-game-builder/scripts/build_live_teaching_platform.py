@@ -120,21 +120,45 @@ def parse_embedded(values: list[str]) -> list[dict[str, str]]:
     return games
 
 
+def build_groups(count: int) -> list[dict[str, str]]:
+    return [{"id": f"group_{index}", "name": f"第 {index} 组"} for index in range(1, count + 1)]
+
+
 def build_payload(data: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     title = args.title or "黄金样本拍卖"
     subtitle = args.subtitle or "用 100 个虚拟金币决定哪些样本进入黄金评测集"
     if data.get("course_title") and not args.title:
         subtitle = f"基于《{data['course_title']}》构建课堂互动与评测样本拍卖"
     return {
+        "platformTitle": args.platform_title,
+        "platformSubtitle": args.platform_subtitle,
         "title": title,
         "subtitle": subtitle,
         "sessionCode": args.session_code,
         "activity": "golden-sample-auction",
         "budget": args.budget,
         "topN": args.top_n,
+        "groups": build_groups(args.group_count),
         "knowledgeCoverage": [str(point.get("id")) for point in data.get("knowledge_points", []) if point.get("id")],
         "candidates": DEFAULT_CANDIDATES[: args.count],
-        "embeddedGames": parse_embedded(args.embed_game),
+        "applications": [
+            {
+                "id": "golden-sample-auction",
+                "title": title,
+                "kicker": "多人联机",
+                "description": "每人 100 金币，选择最值得进入黄金评测集的样本类型。",
+            },
+            *[
+                {
+                    "id": f"embedded_{index}",
+                    "title": game["title"],
+                    "href": game["href"],
+                    "kicker": "小游戏",
+                    "description": "从课堂主页进入的外部小游戏或练习。",
+                }
+                for index, game in enumerate(parse_embedded(args.embed_game), start=1)
+            ],
+        ],
     }
 
 
@@ -144,10 +168,13 @@ def main() -> int:
     parser.add_argument("--out", required=True)
     parser.add_argument("--title")
     parser.add_argument("--subtitle")
+    parser.add_argument("--platform-title", default="课堂互动平台")
+    parser.add_argument("--platform-subtitle", default="选择组别、进入活动、把小游戏和多人任务挂到同一主页")
     parser.add_argument("--session-code", default="GOLD")
     parser.add_argument("--budget", type=int, default=100)
     parser.add_argument("--top-n", type=int, default=5)
     parser.add_argument("--count", type=int, default=10)
+    parser.add_argument("--group-count", type=int, default=6)
     parser.add_argument("--embed-game", action="append", default=[], help="Add a launcher link as title=href.")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()

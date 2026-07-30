@@ -32,6 +32,10 @@ function publicState() {
     participants: state.participants.map((item) => ({
       id: item.id,
       name: item.name,
+      nickname: item.nickname || "",
+      groupId: item.groupId || "",
+      groupName: item.groupName || "",
+      memberNumber: item.memberNumber || 0,
       bids: item.bids || {},
       joinedAt: item.joinedAt,
       submittedAt: item.submittedAt || null,
@@ -59,6 +63,16 @@ async function readBody(request) {
 
 function participantById(id) {
   return state.participants.find((item) => item.id === id);
+}
+
+function groupById(id) {
+  return (activityData.groups || []).find((item) => item.id === id);
+}
+
+function nextMemberNumber(groupId) {
+  return state.participants
+    .filter((item) => item.groupId === groupId)
+    .reduce((max, item) => Math.max(max, Number(item.memberNumber || 0)), 0) + 1;
 }
 
 async function serveStatic(request, response) {
@@ -104,14 +118,20 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/api/join") {
       const body = await readBody(request);
-      const name = String(body.name || "").trim().slice(0, 24);
-      if (!name) {
-        sendJson(response, 400, { error: "请输入名字或小组名。" });
+      const group = groupById(String(body.groupId || ""));
+      if (!group) {
+        sendJson(response, 400, { error: "请选择有效组别。" });
         return;
       }
+      const memberNumber = nextMemberNumber(group.id);
+      const nickname = String(body.nickname || "").trim().slice(0, 24);
       const participant = {
         id: `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        name,
+        name: `${group.name}-${memberNumber}号`,
+        nickname,
+        groupId: group.id,
+        groupName: group.name,
+        memberNumber,
         bids: {},
         joinedAt: Date.now(),
         submittedAt: null,

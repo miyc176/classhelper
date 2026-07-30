@@ -9,6 +9,20 @@ Use this reference when building a classroom assistant page that may host multip
 
 Use local multiplayer when the activity needs per-participant state, shared budgets, real-time rankings, locking, revealing, or exportable classroom decisions.
 
+## Home Page and Identity
+
+The live teaching platform should open as a classroom home page, not directly inside one activity, when multiple activities or games may be used in the same session.
+
+Required home-page behavior:
+
+- Host role shows a teacher dashboard with the student join URL, available application cards, classroom counts, and group rosters.
+- Participant role first asks the learner to select a group.
+- The server assigns each participant a stable in-group number by join order, starting from 1 for each group.
+- Display participant identity as `第 N 组 · M号`.
+- Store participant identity per browser tab or device session so two student tabs can simulate two devices without overwriting each other.
+- Activity cards on the home page can link to built-in multiplayer activities or standalone mini-games.
+- Built-in activities should use URLs such as `?role=player&app=golden-sample-auction` and `?role=host&app=golden-sample-auction`.
+
 ## Golden Sample Auction
 
 Use the golden sample auction for evaluation-set construction, quality review prioritization, rubric negotiation, or deciding which cases deserve scarce review capacity.
@@ -16,6 +30,7 @@ Use the golden sample auction for evaluation-set construction, quality review pr
 Required mechanics:
 
 - Each participant receives a fixed budget, default 100 virtual coins.
+- Each participant must join through the platform home page and receive a group/member number before bidding.
 - Show 8-10 candidate sample classes on the host screen and participant screen.
 - Participants allocate coins across candidates. Total allocation must not exceed the budget.
 - The host can start, lock, reveal, and reset the session.

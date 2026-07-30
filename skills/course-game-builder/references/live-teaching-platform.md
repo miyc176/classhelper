@@ -67,7 +67,8 @@ For classrooms with many participant devices, isolate each page from unrelated p
 
 - Host pages may refresh rankings and rosters from every state broadcast.
 - Participant pages must not fully rerender when another participant joins, changes a draft, or submits.
-- Participant activity screens should rerender only when the global activity status changes, the participant's own server state changes, or the participant identity is removed by reset.
+- Participant activity screens should rerender only when the global activity status changes, the participant identity changes, or the participant identity is removed by reset.
+- Participant submit confirmations should update local status text and button labels without rebuilding the activity page.
 - High-frequency local controls such as sliders, drag handles, aiming, movement, and typing must update local DOM or canvas state directly instead of rebuilding the whole page.
 - The local server should batch join/bid broadcasts over a short interval when many requests arrive together. Teacher control commands such as open, lock, reveal, and reset should remain immediate.
 

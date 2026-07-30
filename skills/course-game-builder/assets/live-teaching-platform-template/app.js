@@ -33,14 +33,12 @@ function api(path, options = {}) {
   });
 }
 
-function participantSnapshot(item) {
+function participantIdentitySnapshot(item) {
   if (!item) return "";
   return JSON.stringify({
     id: item.id,
     groupId: item.groupId,
     memberNumber: item.memberNumber,
-    submittedAt: item.submittedAt || null,
-    bids: item.bids || {},
   });
 }
 
@@ -58,8 +56,8 @@ function shouldRenderForStateChange(previousState, nextState, previousPlayer, ne
   if (role !== "player") return true;
   if (!nextPlayer) return true;
 
-  const before = participantSnapshot(ownParticipantFrom(previousState, previousPlayer));
-  const after = participantSnapshot(ownParticipantFrom(nextState, nextPlayer));
+  const before = participantIdentitySnapshot(ownParticipantFrom(previousState, previousPlayer));
+  const after = participantIdentitySnapshot(ownParticipantFrom(nextState, nextPlayer));
   if (before !== after) return true;
 
   if (currentApp === AUCTION_APP) return false;
@@ -85,6 +83,7 @@ function connectEvents() {
     state = JSON.parse(event.data);
     syncPlayer();
     if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
+    else refreshLocalControls();
   };
   eventSource.onerror = () => setTimeout(loadState, 1200);
 }
@@ -95,6 +94,7 @@ async function loadState() {
   state = await api("/api/state");
   syncPlayer();
   if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
+  else refreshLocalControls();
 }
 
 function syncPlayer() {
@@ -383,6 +383,7 @@ function renderPlayerAuction() {
   const used = totalDraft();
   const remaining = DATA.budget - used;
   const canSubmit = remaining >= 0 && state.status === "open";
+  const submitLabel = state.status === "open" ? (player?.submittedAt ? "更新金币" : "提交金币") : "等待老师开始";
   shell(`
     <main class="player-layout">
       <a class="back-link" href="${appUrl("", "player")}">返回应用主页</a>
@@ -421,7 +422,7 @@ function renderPlayerAuction() {
       </section>
       <footer class="submit-bar">
         <span id="usage-state">${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}</span>
-        <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${state.status === "open" ? "提交金币" : "等待老师开始"}</button>
+        <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${submitLabel}</button>
       </footer>
     </main>
   `);
@@ -480,10 +481,18 @@ function updateBudgetUi() {
   if (remainingEl) remainingEl.textContent = `剩余 ${money(remaining)}`;
 
   const usageEl = app.querySelector("#usage-state");
-  if (usageEl) usageEl.textContent = `${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}`;
+  const submitted = player?.submittedAt ? " · 已提交" : "";
+  if (usageEl) usageEl.textContent = `${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}${submitted}`;
 
   const submit = app.querySelector("#submit-bids");
-  if (submit) submit.disabled = !(remaining >= 0 && state.status === "open");
+  if (submit) {
+    submit.disabled = !(remaining >= 0 && state.status === "open");
+    submit.textContent = state.status === "open" ? (player?.submittedAt ? "更新金币" : "提交金币") : "等待老师开始";
+  }
+}
+
+function refreshLocalControls() {
+  if (role === "player" && currentApp === AUCTION_APP) updateBudgetUi();
 }
 
 async function submitBids() {
@@ -498,7 +507,7 @@ async function submitBids() {
   });
   player = result.participant;
   sessionStorage.setItem(storageKey, JSON.stringify(player));
-  await loadState();
+  updateBudgetUi();
 }
 
 async function control(action) {

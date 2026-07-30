@@ -73,6 +73,8 @@ For classrooms with many participant devices, isolate each page from unrelated p
 - The local server should batch join/bid broadcasts over a short interval when many requests arrive together. Teacher control commands such as open, lock, reveal, and reset should remain immediate.
 - Realtime payloads should be role-scoped: host clients receive full classroom state; participant clients receive only their own participant record, total/submitted counts, and group counts.
 - Participant bid submissions should notify host clients and the submitting participant only. Do not broadcast every participant's bids to all participant devices.
+- Host screens may use SSE/EventSource for immediate dashboard updates. Participant screens should use lightweight jittered polling rather than one long-lived SSE connection per tab, because one browser simulating multiple devices can hit per-origin connection limits and stall new tabs.
+- Participant polling should use random jitter, avoid overlapping in-flight state requests, and slow down while the page is hidden.
 - Validate with a burst test that creates at least 30 simulated participants and submits bids concurrently.
 
 ## Validation
@@ -82,6 +84,7 @@ For classrooms with many participant devices, isolate each page from unrelated p
 - Verify totals update on the host page without refresh.
 - Verify one participant can move controls smoothly while another participant submits, without losing focus, resetting local draft values, or triggering a visible page rebuild.
 - Verify participant `/api/state?role=player&participantId=...` responses do not expose other participants' bids.
+- Verify one host plus at least six participant tabs can load in the same browser profile without a participant tab staying on the loading screen.
 - Verify lock prevents further participant submission.
 - Verify reveal highlights top-N candidates.
 - Verify reset clears participants and returns status to setup.

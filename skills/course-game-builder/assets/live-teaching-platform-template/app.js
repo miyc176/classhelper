@@ -10,6 +10,9 @@ let player = JSON.parse(sessionStorage.getItem(storageKey) || "null");
 let draftBids = {};
 let eventSource = null;
 let renderPending = false;
+let pollTimer = null;
+let eventRetryTimer = null;
+let loadingState = false;
 
 const AUCTION_APP = "golden-sample-auction";
 
@@ -82,8 +85,27 @@ function scheduleRender() {
   });
 }
 
+function stopRealtime() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+  if (eventRetryTimer) {
+    clearTimeout(eventRetryTimer);
+    eventRetryTimer = null;
+  }
+}
+
 function connectEvents() {
-  if (eventSource) eventSource.close();
+  stopRealtime();
+  if (role === "player") {
+    startPolling();
+    return;
+  }
   eventSource = new EventSource(livePath("/events"));
   eventSource.onmessage = (event) => {
     const previousState = state;
@@ -93,16 +115,48 @@ function connectEvents() {
     if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
     else refreshLocalControls();
   };
-  eventSource.onerror = () => setTimeout(loadState, 1200);
+  eventSource.onerror = () => {
+    if (eventRetryTimer) return;
+    eventRetryTimer = setTimeout(async () => {
+      eventRetryTimer = null;
+      try {
+        await loadState();
+      } catch {
+        // Keep the host screen alive while the local service restarts.
+      }
+      connectEvents();
+    }, 1200);
+  };
+}
+
+function startPolling() {
+  const tick = async () => {
+    try {
+      await loadState();
+    } catch {
+      // Poll again instead of freezing a participant tab on a transient request.
+    }
+    const delay = document.hidden
+      ? 4200 + Math.round(Math.random() * 1600)
+      : 1200 + Math.round(Math.random() * 900);
+    pollTimer = setTimeout(tick, delay);
+  };
+  pollTimer = setTimeout(tick, 250 + Math.round(Math.random() * 500));
 }
 
 async function loadState() {
+  if (loadingState) return;
+  loadingState = true;
   const previousState = state;
   const previousPlayer = player;
-  state = await api(livePath("/api/state"));
-  syncPlayer();
-  if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
-  else refreshLocalControls();
+  try {
+    state = await api(livePath("/api/state"));
+    syncPlayer();
+    if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
+    else refreshLocalControls();
+  } finally {
+    loadingState = false;
+  }
 }
 
 function syncPlayer() {
@@ -470,8 +524,8 @@ async function join(event) {
   player = result.participant;
   draftBids = { ...(player.bids || {}) };
   sessionStorage.setItem(storageKey, JSON.stringify(player));
-  connectEvents();
   await loadState();
+  connectEvents();
 }
 
 function updateBid(id, value) {
@@ -528,6 +582,10 @@ async function control(action) {
   await api("/api/control", { method: "POST", body: JSON.stringify({ action }) });
   await loadState();
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && role === "player") loadState().catch(() => {});
+});
 
 loadState().then(connectEvents).catch((error) => {
   shell(`<main class="loading error">无法连接服务：${esc(error.message)}。请确认 server.mjs 正在运行。</main>`);

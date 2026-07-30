@@ -71,6 +71,9 @@ For classrooms with many participant devices, isolate each page from unrelated p
 - Participant submit confirmations should update local status text and button labels without rebuilding the activity page.
 - High-frequency local controls such as sliders, drag handles, aiming, movement, and typing must update local DOM or canvas state directly instead of rebuilding the whole page.
 - The local server should batch join/bid broadcasts over a short interval when many requests arrive together. Teacher control commands such as open, lock, reveal, and reset should remain immediate.
+- Realtime payloads should be role-scoped: host clients receive full classroom state; participant clients receive only their own participant record, total/submitted counts, and group counts.
+- Participant bid submissions should notify host clients and the submitting participant only. Do not broadcast every participant's bids to all participant devices.
+- Validate with a burst test that creates at least 30 simulated participants and submits bids concurrently.
 
 ## Validation
 
@@ -78,6 +81,7 @@ For classrooms with many participant devices, isolate each page from unrelated p
 - Verify at least two simulated participants can join, allocate coins, and submit.
 - Verify totals update on the host page without refresh.
 - Verify one participant can move controls smoothly while another participant submits, without losing focus, resetting local draft values, or triggering a visible page rebuild.
+- Verify participant `/api/state?role=player&participantId=...` responses do not expose other participants' bids.
 - Verify lock prevents further participant submission.
 - Verify reveal highlights top-N candidates.
 - Verify reset clears participants and returns status to setup.

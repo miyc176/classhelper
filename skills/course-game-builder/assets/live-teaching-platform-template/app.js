@@ -33,6 +33,13 @@ function api(path, options = {}) {
   });
 }
 
+function livePath(path) {
+  const query = new URLSearchParams({ role });
+  if (player?.id) query.set("participantId", player.id);
+  if (currentApp) query.set("app", currentApp);
+  return `${path}?${query.toString()}`;
+}
+
 function participantIdentitySnapshot(item) {
   if (!item) return "";
   return JSON.stringify({
@@ -44,7 +51,8 @@ function participantIdentitySnapshot(item) {
 
 function ownParticipantFrom(snapshot, participant) {
   if (!snapshot || !participant) return null;
-  return snapshot.participants.find((item) => item.id === participant.id) || null;
+  if (snapshot.participant?.id === participant.id) return snapshot.participant;
+  return (snapshot.participants || []).find((item) => item.id === participant.id) || null;
 }
 
 function shouldRenderForStateChange(previousState, nextState, previousPlayer, nextPlayer) {
@@ -76,7 +84,7 @@ function scheduleRender() {
 
 function connectEvents() {
   if (eventSource) eventSource.close();
-  eventSource = new EventSource("/events");
+  eventSource = new EventSource(livePath("/events"));
   eventSource.onmessage = (event) => {
     const previousState = state;
     const previousPlayer = player;
@@ -91,7 +99,7 @@ function connectEvents() {
 async function loadState() {
   const previousState = state;
   const previousPlayer = player;
-  state = await api("/api/state");
+  state = await api(livePath("/api/state"));
   syncPlayer();
   if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
   else refreshLocalControls();
@@ -168,7 +176,11 @@ function candidateTotals() {
 
 function groupCounts() {
   const counts = new Map(DATA.groups.map((group) => [group.id, 0]));
-  (state?.participants || []).forEach((item) => counts.set(item.groupId, (counts.get(item.groupId) || 0) + 1));
+  if (Array.isArray(state?.groupCounts)) {
+    state.groupCounts.forEach((item) => counts.set(item.groupId, Number(item.count || 0)));
+  } else {
+    (state?.participants || []).forEach((item) => counts.set(item.groupId, (counts.get(item.groupId) || 0) + 1));
+  }
   return counts;
 }
 
@@ -458,6 +470,7 @@ async function join(event) {
   player = result.participant;
   draftBids = { ...(player.bids || {}) };
   sessionStorage.setItem(storageKey, JSON.stringify(player));
+  connectEvents();
   await loadState();
 }
 

@@ -26,21 +26,50 @@ let state = {
 };
 const clients = new Set();
 let broadcastTimer = null;
+let pendingBroadcastScope = null;
 
-function publicState() {
+function groupCounts() {
+  const counts = new Map((activityData.groups || []).map((group) => [group.id, 0]));
+  for (const participant of state.participants) {
+    counts.set(participant.groupId, (counts.get(participant.groupId) || 0) + 1);
+  }
+  return Array.from(counts, ([groupId, count]) => ({ groupId, count }));
+}
+
+function participantSummary(item, includeBids = true) {
   return {
-    ...state,
-    participants: state.participants.map((item) => ({
-      id: item.id,
-      name: item.name,
-      nickname: item.nickname || "",
-      groupId: item.groupId || "",
-      groupName: item.groupName || "",
-      memberNumber: item.memberNumber || 0,
-      bids: item.bids || {},
-      joinedAt: item.joinedAt,
-      submittedAt: item.submittedAt || null,
-    })),
+    id: item.id,
+    name: item.name,
+    nickname: item.nickname || "",
+    groupId: item.groupId || "",
+    groupName: item.groupName || "",
+    memberNumber: item.memberNumber || 0,
+    bids: includeBids ? item.bids || {} : {},
+    joinedAt: item.joinedAt,
+    submittedAt: item.submittedAt || null,
+  };
+}
+
+function publicState(client = {}) {
+  const base = {
+    status: state.status,
+    updatedAt: state.updatedAt,
+    participantCount: state.participants.length,
+    submittedCount: state.participants.filter((item) => item.submittedAt).length,
+    groupCounts: groupCounts(),
+  };
+  if (client.role === "player") {
+    const participant = client.participantId ? participantById(client.participantId) : null;
+    const participants = participant ? [participantSummary(participant)] : [];
+    return {
+      ...base,
+      participant: participant ? participantSummary(participant) : null,
+      participants,
+    };
+  }
+  return {
+    ...base,
+    participants: state.participants.map((item) => participantSummary(item)),
   };
 }
 
@@ -49,21 +78,57 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
-function broadcast() {
+function cloneScope(scope = {}) {
+  scope ||= {};
+  return {
+    all: Boolean(scope.all),
+    includePlayers: Boolean(scope.includePlayers),
+    participantIds: new Set(scope.participantIds || []),
+  };
+}
+
+function mergeScope(previous, next) {
+  const merged = cloneScope(previous);
+  const incoming = cloneScope(next);
+  merged.all = merged.all || incoming.all;
+  merged.includePlayers = merged.includePlayers || incoming.includePlayers;
+  for (const id of incoming.participantIds) merged.participantIds.add(id);
+  return merged;
+}
+
+function shouldSendToClient(client, scope) {
+  if (scope.all) return true;
+  if (client.role === "host") return true;
+  if (scope.includePlayers && client.role === "player") return true;
+  return client.participantId && scope.participantIds.has(client.participantId);
+}
+
+function broadcast(scope = { all: true }) {
   if (broadcastTimer) {
     clearTimeout(broadcastTimer);
     broadcastTimer = null;
   }
+  pendingBroadcastScope = null;
   state.updatedAt = Date.now();
-  const payload = `data: ${JSON.stringify(publicState())}\n\n`;
-  for (const client of clients) client.write(payload);
+  const normalizedScope = cloneScope(scope);
+  for (const client of Array.from(clients)) {
+    if (!shouldSendToClient(client, normalizedScope)) continue;
+    try {
+      client.response.write(`data: ${JSON.stringify(publicState(client))}\n\n`);
+    } catch {
+      clients.delete(client);
+    }
+  }
 }
 
-function broadcastSoon() {
+function broadcastSoon(scope = { all: true }) {
+  pendingBroadcastScope = mergeScope(pendingBroadcastScope, scope);
   if (broadcastTimer) return;
   broadcastTimer = setTimeout(() => {
+    const scopeToSend = pendingBroadcastScope || { all: true };
     broadcastTimer = null;
-    broadcast();
+    pendingBroadcastScope = null;
+    broadcast(scopeToSend);
   }, 60);
 }
 
@@ -118,18 +183,26 @@ const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
     if (request.method === "GET" && url.pathname === "/api/state") {
-      sendJson(response, 200, publicState());
+      sendJson(response, 200, publicState({
+        role: url.searchParams.get("role") || "host",
+        participantId: url.searchParams.get("participantId") || "",
+      }));
       return;
     }
     if (request.method === "GET" && url.pathname === "/events") {
+      const client = {
+        response,
+        role: url.searchParams.get("role") || "host",
+        participantId: url.searchParams.get("participantId") || "",
+      };
       response.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       });
-      response.write(`data: ${JSON.stringify(publicState())}\n\n`);
-      clients.add(response);
-      request.on("close", () => clients.delete(response));
+      response.write(`data: ${JSON.stringify(publicState(client))}\n\n`);
+      clients.add(client);
+      request.on("close", () => clients.delete(client));
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/join") {
@@ -153,7 +226,7 @@ const server = http.createServer(async (request, response) => {
         submittedAt: null,
       };
       state.participants.push(participant);
-      broadcastSoon();
+      broadcastSoon({ includePlayers: true });
       sendJson(response, 200, { participant });
       return;
     }
@@ -179,7 +252,7 @@ const server = http.createServer(async (request, response) => {
       }
       participant.bids = bids;
       participant.submittedAt = Date.now();
-      broadcastSoon();
+      broadcastSoon({ participantIds: [participant.id] });
       sendJson(response, 200, { participant });
       return;
     }
@@ -193,8 +266,8 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 400, { error: "未知控制命令。" });
         return;
       }
-      broadcast();
-      sendJson(response, 200, publicState());
+      broadcast({ all: true });
+      sendJson(response, 200, publicState({ role: "host" }));
       return;
     }
     await serveStatic(request, response);

@@ -25,6 +25,7 @@ let state = {
   updatedAt: Date.now(),
 };
 const clients = new Set();
+let broadcastTimer = null;
 
 function publicState() {
   return {
@@ -49,9 +50,21 @@ function sendJson(response, status, body) {
 }
 
 function broadcast() {
+  if (broadcastTimer) {
+    clearTimeout(broadcastTimer);
+    broadcastTimer = null;
+  }
   state.updatedAt = Date.now();
   const payload = `data: ${JSON.stringify(publicState())}\n\n`;
   for (const client of clients) client.write(payload);
+}
+
+function broadcastSoon() {
+  if (broadcastTimer) return;
+  broadcastTimer = setTimeout(() => {
+    broadcastTimer = null;
+    broadcast();
+  }, 60);
 }
 
 async function readBody(request) {
@@ -140,7 +153,7 @@ const server = http.createServer(async (request, response) => {
         submittedAt: null,
       };
       state.participants.push(participant);
-      broadcast();
+      broadcastSoon();
       sendJson(response, 200, { participant });
       return;
     }
@@ -166,7 +179,7 @@ const server = http.createServer(async (request, response) => {
       }
       participant.bids = bids;
       participant.submittedAt = Date.now();
-      broadcast();
+      broadcastSoon();
       sendJson(response, 200, { participant });
       return;
     }

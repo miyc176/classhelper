@@ -9,6 +9,7 @@ let state = null;
 let player = JSON.parse(sessionStorage.getItem(storageKey) || "null");
 let draftBids = {};
 let eventSource = null;
+let renderPending = false;
 
 const AUCTION_APP = "golden-sample-auction";
 
@@ -32,21 +33,68 @@ function api(path, options = {}) {
   });
 }
 
+function participantSnapshot(item) {
+  if (!item) return "";
+  return JSON.stringify({
+    id: item.id,
+    groupId: item.groupId,
+    memberNumber: item.memberNumber,
+    submittedAt: item.submittedAt || null,
+    bids: item.bids || {},
+  });
+}
+
+function ownParticipantFrom(snapshot, participant) {
+  if (!snapshot || !participant) return null;
+  return snapshot.participants.find((item) => item.id === participant.id) || null;
+}
+
+function shouldRenderForStateChange(previousState, nextState, previousPlayer, nextPlayer) {
+  if (!previousState) return true;
+  if (role === "host") return true;
+  if (previousState.status !== nextState.status) return true;
+  if (!previousPlayer && nextPlayer) return true;
+  if (previousPlayer && !nextPlayer) return true;
+  if (role !== "player") return true;
+  if (!nextPlayer) return true;
+
+  const before = participantSnapshot(ownParticipantFrom(previousState, previousPlayer));
+  const after = participantSnapshot(ownParticipantFrom(nextState, nextPlayer));
+  if (before !== after) return true;
+
+  if (currentApp === AUCTION_APP) return false;
+  if (!currentApp) return false;
+  return true;
+}
+
+function scheduleRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    render();
+  });
+}
+
 function connectEvents() {
   if (eventSource) eventSource.close();
   eventSource = new EventSource("/events");
   eventSource.onmessage = (event) => {
+    const previousState = state;
+    const previousPlayer = player;
     state = JSON.parse(event.data);
     syncPlayer();
-    render();
+    if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
   };
   eventSource.onerror = () => setTimeout(loadState, 1200);
 }
 
 async function loadState() {
+  const previousState = state;
+  const previousPlayer = player;
   state = await api("/api/state");
   syncPlayer();
-  render();
+  if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
 }
 
 function syncPlayer() {
@@ -341,7 +389,7 @@ function renderPlayerAuction() {
       <section class="wallet">
         <div>
           <p class="panel-label">${esc(participantLabel(player))}</p>
-          <h2>剩余 ${money(remaining)}</h2>
+          <h2 id="remaining-budget">剩余 ${money(remaining)}</h2>
           <p>把 ${DATA.budget} 金币分配给你认为最值得进入黄金评测集的样本。</p>
         </div>
         <button id="leave" class="ghost">重新选组</button>
@@ -365,14 +413,14 @@ function renderPlayerAuction() {
                 <button data-step="-10" data-id="${esc(candidate.id)}">-10</button>
                 <input type="range" min="0" max="${DATA.budget}" step="5" value="${value}" data-id="${esc(candidate.id)}" />
                 <button data-step="10" data-id="${esc(candidate.id)}">+10</button>
-                <output>${value}</output>
+                <output data-output="${esc(candidate.id)}">${value}</output>
               </div>
             </article>
           `;
         }).join("")}
       </section>
       <footer class="submit-bar">
-        <span>${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}</span>
+        <span id="usage-state">${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}</span>
         <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${state.status === "open" ? "提交金币" : "等待老师开始"}</button>
       </footer>
     </main>
@@ -413,8 +461,29 @@ async function join(event) {
 }
 
 function updateBid(id, value) {
-  draftBids[id] = Math.max(0, Math.min(DATA.budget, Math.round(value / 5) * 5));
-  renderPlayerAuction();
+  const normalized = Math.max(0, Math.min(DATA.budget, Math.round(value / 5) * 5));
+  draftBids[id] = normalized;
+
+  const input = app.querySelector(`input[type=range][data-id="${CSS.escape(id)}"]`);
+  if (input && Number(input.value) !== normalized) input.value = String(normalized);
+
+  const output = app.querySelector(`output[data-output="${CSS.escape(id)}"]`);
+  if (output) output.textContent = String(normalized);
+
+  updateBudgetUi();
+}
+
+function updateBudgetUi() {
+  const used = totalDraft();
+  const remaining = DATA.budget - used;
+  const remainingEl = app.querySelector("#remaining-budget");
+  if (remainingEl) remainingEl.textContent = `剩余 ${money(remaining)}`;
+
+  const usageEl = app.querySelector("#usage-state");
+  if (usageEl) usageEl.textContent = `${statusLabel(state.status)} · 已用 ${used}/${DATA.budget}`;
+
+  const submit = app.querySelector("#submit-bids");
+  if (submit) submit.disabled = !(remaining >= 0 && state.status === "open");
 }
 
 async function submitBids() {

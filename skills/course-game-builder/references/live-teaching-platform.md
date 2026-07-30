@@ -61,11 +61,22 @@ For local multiplayer:
 - Participants open `http://<teacher-lan-ip>:8787?role=player`.
 - If phones cannot connect, check firewall rules, VPN isolation, guest Wi-Fi isolation, and whether the printed LAN IP is reachable.
 
+## Realtime Performance
+
+For classrooms with many participant devices, isolate each page from unrelated participant activity.
+
+- Host pages may refresh rankings and rosters from every state broadcast.
+- Participant pages must not fully rerender when another participant joins, changes a draft, or submits.
+- Participant activity screens should rerender only when the global activity status changes, the participant's own server state changes, or the participant identity is removed by reset.
+- High-frequency local controls such as sliders, drag handles, aiming, movement, and typing must update local DOM or canvas state directly instead of rebuilding the whole page.
+- The local server should batch join/bid broadcasts over a short interval when many requests arrive together. Teacher control commands such as open, lock, reveal, and reset should remain immediate.
+
 ## Validation
 
 - Verify the host page loads and shows the join URL.
 - Verify at least two simulated participants can join, allocate coins, and submit.
 - Verify totals update on the host page without refresh.
+- Verify one participant can move controls smoothly while another participant submits, without losing focus, resetting local draft values, or triggering a visible page rebuild.
 - Verify lock prevents further participant submission.
 - Verify reveal highlights top-N candidates.
 - Verify reset clears participants and returns status to setup.

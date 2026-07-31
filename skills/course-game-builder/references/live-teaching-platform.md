@@ -34,7 +34,11 @@ Required mechanics:
 - Show 8-10 candidate sample classes on the host screen and participant screen.
 - Participants allocate all coins across candidates. Client controls must never show a negative balance, and the server must reject under-budget, over-budget, unknown, negative, fractional, or off-step allocations.
 - The host can start, lock, reveal, and reset the session.
+- Host controls must follow a valid phase sequence. Remote participant devices must not receive host state or execute host controls; localhost teacher access may be trusted, while a runtime host key protects remote teacher access.
 - The host screen shows live totals, participant count, submitted count, bidders per candidate, and final top-N winners.
+- The host can copy a LAN-ready participant URL and export candidate rankings plus per-participant allocations as UTF-8 CSV.
+- Participant identities use an unguessable per-device token. A participant id alone must not reveal or mutate that participant's bids.
+- Persist active classroom state locally so an accidental service restart does not erase identities, bids, or the current phase.
 - Candidate cards must include title, scenario description, representative example, selection value, and risk if omitted.
 - The activity must force tradeoffs; do not implement it as ordinary one-vote polling.
 
@@ -84,8 +88,12 @@ For classrooms with many participant devices, isolate each page from unrelated p
 - Verify totals update on the host page without refresh.
 - Verify one participant can move controls smoothly while another participant submits, without losing focus, resetting local draft values, or triggering a visible page rebuild.
 - Verify participant `/api/state?role=player&participantId=...` responses do not expose other participants' bids.
+- Verify participant state and bid submission require the device token returned by `/api/join`; a participant id alone is insufficient.
+- Verify remote participant devices cannot fetch host state or call `/api/control`.
 - Verify one host plus at least six participant tabs can load in the same browser profile without a participant tab staying on the loading screen.
 - Verify lock prevents further participant submission.
 - Verify reveal highlights top-N candidates.
+- Verify revealed aggregate results appear on participant screens and host CSV export downloads successfully.
 - Verify reset clears participants and returns status to setup.
+- Verify a submitted, locked session survives one forced service stop and restart, then reset the test session.
 - After changing the live platform template, run `scripts/test_live_teaching_platform.mjs` against an isolated local service. It verifies client-side budget caps, server-side bid validation, double-submit protection, lock behavior, and desktop/mobile layout.

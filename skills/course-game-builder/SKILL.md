@@ -208,7 +208,7 @@ python scripts/validate_classic_template_set.py path\to\knowledge.json --out pat
 - `assets/html-game-template/`: standalone HTML/CSS/JS template with knowledge coverage metadata.
 - `assets/whack-a-mole-template/`: standalone arcade-cabinet whack-a-mole template with timed pop/hide, mallet feedback, combo, lives, and course answers on the moles.
 - `assets/standalone-classic-template/`: standalone engine with separate visual identities and mechanics for memory, tic-tac-toe, flappy judgment, shooter, and knowledge puzzle outputs.
-- `assets/live-teaching-platform-template/`: local multiplayer teaching assistant platform with host and participant roles, SSE live updates, and a golden sample auction activity.
+- `assets/live-teaching-platform-template/`: local multiplayer teaching assistant platform with protected host controls, participant device tokens, host SSE updates, jittered participant polling, state recovery, CSV export, and a golden sample auction activity.
 - `scripts/inventory_materials.py`: local material inventory and text/embedded-image extraction for PPTX, PDF, DOCX, text, Markdown, and standalone images.
 - `scripts/build_game_from_knowledge.py`: deterministic baseline HTML game generator from `knowledge.json`.
 - `scripts/classic_payload.py`: shared deterministic data shaping helpers for standalone classic game generators.

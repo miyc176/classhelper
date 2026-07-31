@@ -37,6 +37,28 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 }
 .topbar h1 { margin: 0; font-size: clamp(26px, 4vw, 42px); letter-spacing: 0; }
 .topbar p { margin: 4px 0 0; color: var(--muted); }
+.connection-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  color: #3e4b5d;
+  background: #eef2f7;
+  font-size: 12px;
+  font-weight: 900;
+}
+.connection-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: #9aa6b5;
+  border-radius: 50%;
+}
+.connection-status.connected { color: #0f5c55; background: rgba(24,169,153,.12); }
+.connection-status.connected::before { background: var(--teal); }
+.connection-status.offline { color: #a13c31; background: rgba(236,103,85,.12); }
+.connection-status.offline::before { background: var(--coral); }
 .eyebrow, .panel-label {
   margin: 0;
   color: var(--coral);
@@ -84,6 +106,14 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 }
 .join-box span, .join-box small { color: var(--muted); }
 .join-box strong { overflow-wrap: anywhere; font-size: 18px; line-height: 1.45; }
+.join-box .copy-button {
+  min-height: 40px;
+  padding: 0 14px;
+  color: white;
+  background: var(--ink);
+  border: 0;
+  font-weight: 900;
+}
 .stats-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -119,6 +149,12 @@ button:focus-visible, input:focus-visible, a:focus-visible {
   color: var(--ink);
   background: white;
   border: 1px solid var(--line);
+  box-shadow: none;
+}
+.host-actions button:disabled {
+  cursor: not-allowed;
+  color: #8c98a8;
+  background: #e7ecf2;
   box-shadow: none;
 }
 .app-grid {
@@ -279,6 +315,30 @@ button:focus-visible, input:focus-visible, a:focus-visible {
   transition: width .16s ease;
 }
 .home-wallet { align-items: stretch; }
+.player-results {
+  margin: 0 0 14px;
+  padding: 18px;
+  background: white;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--gold);
+}
+.player-results h2 { margin: 5px 0 14px; font-size: 24px; }
+.player-results ol { display: grid; gap: 8px; margin: 0; padding-left: 28px; }
+.player-results li { padding: 8px 10px; background: #f7fafc; }
+.player-results li strong { display: block; }
+.player-results li span { color: var(--muted); font-size: 13px; }
+.phase-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  color: #48566a;
+  background: rgba(255,255,255,.9);
+  border: 1px solid var(--line);
+}
+.phase-note strong { color: var(--ink); }
+.phase-note span { color: var(--muted); }
 .bid-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .bid-card {
   display: grid;

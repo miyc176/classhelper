@@ -1,8 +1,9 @@
 const DATA = window.LIVE_TEACHING_DATA;
 const app = document.querySelector("#app");
 const params = new URLSearchParams(location.search);
-const role = params.get("role") || "host";
+const role = params.get("role") === "player" ? "player" : "host";
 const currentApp = params.get("app") || "";
+const hostKey = params.get("key") || "";
 const storageKey = `live-teaching-player-${DATA.sessionCode || DATA.activity}`;
 
 let state = null;
@@ -14,6 +15,7 @@ let pollTimer = null;
 let eventRetryTimer = null;
 let loadingState = false;
 let submittingBids = false;
+let connectionStatus = "connecting";
 
 const AUCTION_APP = "golden-sample-auction";
 const BUDGET = Math.max(1, Number(DATA.budget ?? 100));
@@ -29,8 +31,11 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
 }[char]));
 
 function api(path, options = {}) {
+  const authHeaders = {};
+  if (role === "host" && hostKey) authHeaders["X-Host-Key"] = hostKey;
+  if (role === "player" && player?.token) authHeaders["X-Participant-Token"] = player.token;
   return fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders, ...(options.headers || {}) },
     ...options,
   }).then(async (response) => {
     const text = await response.text();
@@ -43,6 +48,8 @@ function api(path, options = {}) {
 function livePath(path) {
   const query = new URLSearchParams({ role });
   if (player?.id) query.set("participantId", player.id);
+  if (role === "host" && hostKey) query.set("key", hostKey);
+  if (role === "player" && player?.token) query.set("participantToken", player.token);
   if (currentApp) query.set("app", currentApp);
   return `${path}?${query.toString()}`;
 }
@@ -115,11 +122,13 @@ function connectEvents() {
     const previousState = state;
     const previousPlayer = player;
     state = JSON.parse(event.data);
+    setConnectionStatus("connected");
     syncPlayer();
     if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
     else refreshLocalControls();
   };
   eventSource.onerror = () => {
+    setConnectionStatus("offline");
     if (eventRetryTimer) return;
     eventRetryTimer = setTimeout(async () => {
       eventRetryTimer = null;
@@ -138,6 +147,7 @@ function startPolling() {
     try {
       await loadState();
     } catch {
+      setConnectionStatus("offline");
       // Poll again instead of freezing a participant tab on a transient request.
     }
     const delay = document.hidden
@@ -155,6 +165,7 @@ async function loadState() {
   const previousPlayer = player;
   try {
     state = await api(livePath("/api/state"));
+    setConnectionStatus("connected");
     syncPlayer();
     if (shouldRenderForStateChange(previousState, state, previousPlayer, player)) scheduleRender();
     else refreshLocalControls();
@@ -194,10 +205,17 @@ function appUrl(appId, nextRole = role) {
 }
 
 function getJoinUrl() {
+  if (Array.isArray(state?.joinUrls) && state.joinUrls.length) return state.joinUrls[0];
   const url = new URL(location.href);
   url.searchParams.set("role", "player");
   url.searchParams.delete("app");
+  url.searchParams.delete("key");
   return url.href;
+}
+
+function getJoinUrls() {
+  if (Array.isArray(state?.joinUrls) && state.joinUrls.length) return state.joinUrls;
+  return [getJoinUrl()];
 }
 
 function money(value) {
@@ -240,6 +258,18 @@ function candidateTotals() {
   }).sort((a, b) => b.total - a.total);
 }
 
+function setConnectionStatus(status) {
+  connectionStatus = status;
+  const indicator = app.querySelector("#connection-status");
+  if (!indicator) return;
+  indicator.className = `connection-status ${status}`;
+  indicator.textContent = {
+    connecting: "连接中",
+    connected: "已连接",
+    offline: "连接中断，正在重试",
+  }[status] || status;
+}
+
 function groupCounts() {
   const counts = new Map(DATA.groups.map((group) => [group.id, 0]));
   if (Array.isArray(state?.groupCounts)) {
@@ -258,9 +288,39 @@ function shell(content) {
         <h1>${esc(DATA.platformTitle || DATA.title)}</h1>
         <p>${esc(DATA.platformSubtitle || DATA.subtitle)}</p>
       </div>
+      <span id="connection-status" class="connection-status ${connectionStatus}">${
+        connectionStatus === "connected" ? "已连接" : connectionStatus === "offline" ? "连接中断，正在重试" : "连接中"
+      }</span>
     </header>
     ${content}
   `;
+}
+
+function joinBox() {
+  return `
+    <div class="join-box">
+      <span>学生入口</span>
+      ${getJoinUrls().map((url) => `<strong>${esc(url)}</strong>`).join("")}
+      <button id="copy-join-url" class="copy-button" type="button">复制学生入口</button>
+      <small>同一 Wi-Fi 下用手机打开。若有多个地址，优先尝试与学生设备同网段的地址。</small>
+    </div>
+  `;
+}
+
+function bindCopyJoinUrl() {
+  const button = app.querySelector("#copy-join-url");
+  if (!button) return;
+  button.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(getJoinUrl());
+      button.textContent = "已复制";
+    } catch {
+      button.textContent = "请长按上方地址复制";
+    }
+    setTimeout(() => {
+      if (button.isConnected) button.textContent = "复制学生入口";
+    }, 1600);
+  };
 }
 
 function render() {
@@ -319,11 +379,7 @@ function renderHostHome() {
           <h2>选择一个教学应用</h2>
           <p>学生先在主页选择组别，系统会按加入顺序自动分配组内序号。老师端可以从这里进入任意教学活动。</p>
         </div>
-        <div class="join-box">
-          <span>学生入口</span>
-          <strong>${esc(getJoinUrl())}</strong>
-          <small>同一 Wi-Fi 下用手机打开。每个学生选择组别后会自动获得 1号、2号、3号...</small>
-        </div>
+        ${joinBox()}
       </section>
       <section class="stats-strip">
         <div><strong>${state.participants.length}</strong><span>已加入学生</span></div>
@@ -335,6 +391,7 @@ function renderHostHome() {
       ${groupRoster()}
     </main>
   `);
+  bindCopyJoinUrl();
 }
 
 function renderPlayerHome() {
@@ -399,6 +456,10 @@ function renderHostAuction() {
   const totals = candidateTotals();
   const submitted = state.participants.filter((item) => item.submittedAt).length;
   const top = totals.slice(0, DATA.topN || 5);
+  const maxTotal = Math.max(1, ...totals.map((item) => item.total));
+  const canOpen = ["setup", "locked", "revealed"].includes(state.status);
+  const canLock = state.status === "open";
+  const canReveal = state.status === "locked" && submitted > 0;
   shell(`
     <main class="host-layout">
       <a class="back-link" href="${appUrl("", "host")}">返回应用主页</a>
@@ -408,11 +469,7 @@ function renderHostAuction() {
           <h2>${esc(DATA.title)}</h2>
           <p>每位学生有 ${DATA.budget} 个虚拟金币。请把金币投给最值得进入黄金评测集的候选样本。</p>
         </div>
-        <div class="join-box">
-          <span>学生入口</span>
-          <strong>${esc(getJoinUrl())}</strong>
-          <small>学生先选组别并获得组内序号，再进入拍卖应用。</small>
-        </div>
+        ${joinBox()}
       </section>
 
       <section class="stats-strip">
@@ -423,9 +480,12 @@ function renderHostAuction() {
       </section>
 
       <section class="host-actions">
-        <button data-action="open">开始投金币</button>
-        <button data-action="lock">锁定投票</button>
-        <button data-action="reveal">揭晓结果</button>
+        <button data-action="open" ${canOpen ? "" : "disabled"}>${
+          state.status === "setup" ? "开始投金币" : "继续投金币"
+        }</button>
+        <button data-action="lock" ${canLock ? "" : "disabled"}>锁定投票</button>
+        <button data-action="reveal" ${canReveal ? "" : "disabled"}>揭晓结果</button>
+        <button id="export-results" ${submitted ? "" : "disabled"}>导出结果</button>
         <button data-action="reset" class="ghost">重置本局</button>
       </section>
 
@@ -436,7 +496,7 @@ function renderHostAuction() {
             <div class="rank-main">
               <div class="rank-title"><strong>${esc(item.title)}</strong><span>${esc(item.tag)}</span></div>
               <p>${esc(item.description)}</p>
-              <div class="bar"><i style="width:${Math.min(100, item.total)}%"></i></div>
+              <div class="bar"><i style="width:${item.total / maxTotal * 100}%"></i></div>
             </div>
             <div class="rank-price">
               <strong>${money(item.total)}</strong>
@@ -448,9 +508,34 @@ function renderHostAuction() {
       ${groupRoster()}
     </main>
   `);
+  bindCopyJoinUrl();
   app.querySelectorAll("[data-action]").forEach((button) => {
     button.onclick = () => control(button.dataset.action);
   });
+  app.querySelector("#export-results").onclick = exportResults;
+}
+
+function revealedResults() {
+  if (state.status !== "revealed" || !Array.isArray(state.results) || !state.results.length) return "";
+  const byId = new Map(state.results.map((item) => [item.id, item]));
+  const ranked = DATA.candidates
+    .map((candidate) => ({ ...candidate, ...(byId.get(candidate.id) || { total: 0, bidders: 0 }) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, DATA.topN || 5);
+  return `
+    <section class="player-results">
+      <p class="panel-label">本轮结果</p>
+      <h2>黄金样本优先名单</h2>
+      <ol>
+        ${ranked.map((item) => `
+          <li>
+            <strong>${esc(item.title)}</strong>
+            <span>${money(item.total)} · ${item.bidders} 人投入</span>
+          </li>
+        `).join("")}
+      </ol>
+    </section>
+  `;
 }
 
 function renderPlayerAuction() {
@@ -473,6 +558,13 @@ function renderPlayerAuction() {
         </div>
         <button id="leave" class="ghost">重新选组</button>
       </section>
+      ${revealedResults()}
+      ${state.status === "open" ? "" : `
+        <div class="phase-note">
+          <strong>${statusLabel(state.status)}</strong>
+          <span>${state.status === "revealed" ? "结果已经公布，本轮投币不可再修改。" : state.status === "locked" ? "老师正在确认结果，本轮投币暂不可修改。" : "等待老师开始本轮活动。"}</span>
+        </div>
+      `}
       <section class="bid-list">
         ${DATA.candidates.map((candidate) => {
           const value = Number(draftBids[candidate.id] || 0);
@@ -498,10 +590,12 @@ function renderPlayerAuction() {
           `;
         }).join("")}
       </section>
-      <footer class="submit-bar">
-        <span id="usage-state">${statusLabel(state.status)} · 已用 ${used}/${BUDGET}</span>
-        <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${submitLabel}</button>
-      </footer>
+      ${state.status === "open" ? `
+        <footer class="submit-bar">
+          <span id="usage-state">${statusLabel(state.status)} · 已用 ${used}/${BUDGET}</span>
+          <button id="submit-bids" ${canSubmit ? "" : "disabled"}>${submitLabel}</button>
+        </footer>
+      ` : ""}
     </main>
   `);
   app.querySelector("#leave").onclick = () => {
@@ -516,29 +610,40 @@ function renderPlayerAuction() {
   app.querySelectorAll("[data-step]").forEach((button) => {
     button.onclick = () => updateBid(button.dataset.id, Number(draftBids[button.dataset.id] || 0) + Number(button.dataset.step));
   });
-  app.querySelector("#submit-bids").onclick = submitBids;
+  const submitButton = app.querySelector("#submit-bids");
+  if (submitButton) submitButton.onclick = submitBids;
   updateBudgetUi();
 }
 
 async function join(event) {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
   if (!formData.get("groupId")) {
     alert("请先选择组别。");
     return;
   }
-  const result = await api("/api/join", {
-    method: "POST",
-    body: JSON.stringify({
-      groupId: formData.get("groupId"),
-      nickname: formData.get("nickname"),
-    }),
-  });
-  player = result.participant;
-  draftBids = { ...(player.bids || {}) };
-  sessionStorage.setItem(storageKey, JSON.stringify(player));
-  await loadState();
-  connectEvents();
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  submit.textContent = "正在加入...";
+  try {
+    const result = await api("/api/join", {
+      method: "POST",
+      body: JSON.stringify({
+        groupId: formData.get("groupId"),
+        nickname: formData.get("nickname"),
+      }),
+    });
+    player = result.participant;
+    draftBids = { ...(player.bids || {}) };
+    sessionStorage.setItem(storageKey, JSON.stringify(player));
+    await loadState();
+    connectEvents();
+  } catch (error) {
+    alert(error.message);
+    submit.disabled = false;
+    submit.textContent = "进入课堂主页";
+  }
 }
 
 function updateBid(id, value) {
@@ -626,10 +731,52 @@ async function submitBids() {
   }
 }
 
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function exportResults() {
+  const totals = candidateTotals();
+  const rows = [
+    ["排名", "候选样本", "标签", "总金币", "投入人数", "人均金币"],
+    ...totals.map((item, index) => [
+      index + 1,
+      item.title,
+      item.tag,
+      item.total,
+      item.bidders,
+      item.average,
+    ]),
+    [],
+    ["组别", "组内序号", "昵称", "是否提交", ...DATA.candidates.map((candidate) => candidate.title)],
+    ...state.participants.map((item) => [
+      item.groupName,
+      item.memberNumber,
+      item.nickname || item.name,
+      item.submittedAt ? "是" : "否",
+      ...DATA.candidates.map((candidate) => Number(item.bids?.[candidate.id] || 0)),
+    ]),
+  ];
+  const csv = `\ufeff${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${DATA.sessionCode || "classroom"}-auction-results.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 async function control(action) {
   if (action === "reset" && !confirm("确定重置本局？所有学生身份和投入都会清空。")) return;
-  await api("/api/control", { method: "POST", body: JSON.stringify({ action }) });
-  await loadState();
+  const buttons = [...app.querySelectorAll(".host-actions button")];
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    await api("/api/control", { method: "POST", body: JSON.stringify({ action }) });
+    await loadState();
+  } catch (error) {
+    alert(error.message);
+    render();
+  }
 }
 
 document.addEventListener("visibilitychange", () => {

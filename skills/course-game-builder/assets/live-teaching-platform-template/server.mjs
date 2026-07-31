@@ -1,5 +1,6 @@
 import http from "node:http";
-import { readFile } from "node:fs/promises";
+import crypto from "node:crypto";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +10,11 @@ import { fileURLToPath } from "node:url";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || process.argv.find((arg) => arg.startsWith("--port="))?.split("=")[1] || 8787);
 const host = process.env.HOST || process.argv.find((arg) => arg.startsWith("--host="))?.split("=")[1] || "0.0.0.0";
+const hostKey = process.env.HOST_KEY
+  || process.argv.find((arg) => arg.startsWith("--host-key="))?.split("=")[1]
+  || crypto.randomBytes(18).toString("base64url");
+const stateFile = path.join(root, ".live-session-state.json");
+const maxParticipants = Math.max(1, Number(process.env.MAX_PARTICIPANTS || 500));
 
 let activityData = {};
 try {
@@ -19,14 +25,46 @@ try {
   activityData = {};
 }
 
-let state = {
+const emptyState = () => ({
   status: "setup",
   participants: [],
   updatedAt: Date.now(),
-};
+});
+let state = emptyState();
+try {
+  const restored = JSON.parse(await readFile(stateFile, "utf8"));
+  if (restored && Array.isArray(restored.participants) && ["setup", "open", "locked", "revealed"].includes(restored.status)) {
+    restored.participants = restored.participants.map((participant) => ({
+      ...participant,
+      token: participant.token || crypto.randomBytes(24).toString("base64url"),
+    }));
+    state = restored;
+  }
+} catch {
+  state = emptyState();
+}
 const clients = new Set();
 let broadcastTimer = null;
 let pendingBroadcastScope = null;
+let persistTimer = null;
+
+function aggregateResults() {
+  return (activityData.candidates || []).map((candidate) => {
+    const total = state.participants.reduce(
+      (sum, participant) => sum + Number(participant.bids?.[candidate.id] || 0),
+      0,
+    );
+    const bidders = state.participants.filter(
+      (participant) => Number(participant.bids?.[candidate.id] || 0) > 0,
+    ).length;
+    return {
+      id: candidate.id,
+      total,
+      bidders,
+      average: bidders ? Math.round(total / bidders) : 0,
+    };
+  }).sort((a, b) => b.total - a.total);
+}
 
 function groupCounts() {
   const counts = new Map((activityData.groups || []).map((group) => [group.id, 0]));
@@ -34,6 +72,18 @@ function groupCounts() {
     counts.set(participant.groupId, (counts.get(participant.groupId) || 0) + 1);
   }
   return Array.from(counts, ([groupId, count]) => ({ groupId, count }));
+}
+
+function playerJoinUrls() {
+  if (["127.0.0.1", "localhost", "::1"].includes(host)) {
+    return [`http://127.0.0.1:${port}/?role=player`];
+  }
+  if (!["0.0.0.0", "::"].includes(host)) {
+    return [`http://${host}:${port}/?role=player`];
+  }
+  return Object.values(os.networkInterfaces()).flat()
+    .filter((info) => info && info.family === "IPv4" && !info.internal)
+    .map((info) => `http://${info.address}:${port}/?role=player`);
 }
 
 function participantSummary(item, includeBids = true) {
@@ -50,6 +100,13 @@ function participantSummary(item, includeBids = true) {
   };
 }
 
+function participantClientRecord(item) {
+  return {
+    ...participantSummary(item),
+    token: item.token,
+  };
+}
+
 function publicState(client = {}) {
   const base = {
     status: state.status,
@@ -57,24 +114,30 @@ function publicState(client = {}) {
     participantCount: state.participants.length,
     submittedCount: state.participants.filter((item) => item.submittedAt).length,
     groupCounts: groupCounts(),
+    results: state.status === "revealed" ? aggregateResults() : [],
   };
   if (client.role === "player") {
     const participant = client.participantId ? participantById(client.participantId) : null;
-    const participants = participant ? [participantSummary(participant)] : [];
+    const authorizedParticipant = participant && client.participantToken === participant.token ? participant : null;
+    const participants = authorizedParticipant ? [participantSummary(authorizedParticipant)] : [];
     return {
       ...base,
-      participant: participant ? participantSummary(participant) : null,
+      participant: authorizedParticipant ? participantSummary(authorizedParticipant) : null,
       participants,
     };
   }
   return {
     ...base,
     participants: state.participants.map((item) => participantSummary(item)),
+    joinUrls: playerJoinUrls(),
   };
 }
 
 function sendJson(response, status, body) {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  response.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
   response.end(JSON.stringify(body));
 }
 
@@ -119,6 +182,7 @@ function broadcast(scope = { all: true }) {
       clients.delete(client);
     }
   }
+  schedulePersist();
 }
 
 function broadcastSoon(scope = { all: true }) {
@@ -134,9 +198,52 @@ function broadcastSoon(scope = { all: true }) {
 
 async function readBody(request) {
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > 64 * 1024) {
+      const error = new Error("请求内容过大。");
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    const error = new Error("请求内容不是有效 JSON。");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function schedulePersist() {
+  if (persistTimer) return;
+  persistTimer = setTimeout(async () => {
+    persistTimer = null;
+    const tempFile = `${stateFile}.tmp`;
+    try {
+      await writeFile(tempFile, JSON.stringify(state, null, 2), "utf8");
+      await rename(tempFile, stateFile);
+    } catch (error) {
+      console.error(`Unable to persist classroom state: ${error.message}`);
+    }
+  }, 80);
+}
+
+function isLoopback(request) {
+  const address = String(request.socket.remoteAddress || "");
+  return address === "::1" || address === "127.0.0.1" || address === "::ffff:127.0.0.1";
+}
+
+function hostAuthorized(request, url) {
+  const supplied = String(request.headers["x-host-key"] || url.searchParams.get("key") || "");
+  return isLoopback(request) || supplied === hostKey;
+}
+
+function denyHost(response) {
+  sendJson(response, 403, { error: "老师端授权无效，请在教师电脑上打开老师入口。" });
 }
 
 function participantById(id) {
@@ -157,7 +264,15 @@ async function serveStatic(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
   const filePath = path.normalize(path.join(root, pathname));
-  if (!filePath.startsWith(root) || !existsSync(filePath)) {
+  const relativePath = path.relative(root, filePath);
+  if (
+    !relativePath
+    || relativePath.startsWith("..")
+    || path.isAbsolute(relativePath)
+    || path.basename(filePath).startsWith(".")
+    || filePath === stateFile
+    || !existsSync(filePath)
+  ) {
     response.writeHead(404);
     response.end("Not found");
     return;
@@ -183,17 +298,29 @@ const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
     if (request.method === "GET" && url.pathname === "/api/state") {
+      const requestedRole = url.searchParams.get("role") === "player" ? "player" : "host";
+      if (requestedRole === "host" && !hostAuthorized(request, url)) {
+        denyHost(response);
+        return;
+      }
       sendJson(response, 200, publicState({
-        role: url.searchParams.get("role") || "host",
+        role: requestedRole,
         participantId: url.searchParams.get("participantId") || "",
+        participantToken: String(request.headers["x-participant-token"] || ""),
       }));
       return;
     }
     if (request.method === "GET" && url.pathname === "/events") {
+      const requestedRole = url.searchParams.get("role") === "player" ? "player" : "host";
+      if (requestedRole === "host" && !hostAuthorized(request, url)) {
+        denyHost(response);
+        return;
+      }
       const client = {
         response,
-        role: url.searchParams.get("role") || "host",
+        role: requestedRole,
         participantId: url.searchParams.get("participantId") || "",
+        participantToken: String(url.searchParams.get("participantToken") || ""),
       };
       response.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -207,13 +334,20 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/api/join") {
       const body = await readBody(request);
+      if (state.participants.length >= maxParticipants) {
+        sendJson(response, 429, { error: `课堂人数已达到上限 ${maxParticipants}。` });
+        return;
+      }
       const group = groupById(String(body.groupId || ""));
       if (!group) {
         sendJson(response, 400, { error: "请选择有效组别。" });
         return;
       }
       const memberNumber = nextMemberNumber(group.id);
-      const nickname = String(body.nickname || "").trim().slice(0, 24);
+      const nickname = String(body.nickname || "")
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .trim()
+        .slice(0, 24);
       const participant = {
         id: `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
         name: `${group.name}-${memberNumber}号`,
@@ -221,13 +355,14 @@ const server = http.createServer(async (request, response) => {
         groupId: group.id,
         groupName: group.name,
         memberNumber,
+        token: crypto.randomBytes(24).toString("base64url"),
         bids: {},
         joinedAt: Date.now(),
         submittedAt: null,
       };
       state.participants.push(participant);
       broadcastSoon({ includePlayers: true });
-      sendJson(response, 200, { participant });
+      sendJson(response, 200, { participant: participantClientRecord(participant) });
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/bid") {
@@ -237,7 +372,8 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       const participant = participantById(body.participantId);
-      if (!participant) {
+      const participantToken = String(request.headers["x-participant-token"] || body.participantToken || "");
+      if (!participant || participant.token !== participantToken) {
         sendJson(response, 404, { error: "参会人不存在，请重新加入。" });
         return;
       }
@@ -273,17 +409,21 @@ const server = http.createServer(async (request, response) => {
       participant.bids = bids;
       participant.submittedAt = Date.now();
       broadcastSoon({ participantIds: [participant.id] });
-      sendJson(response, 200, { participant });
+      sendJson(response, 200, { participant: participantClientRecord(participant) });
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/control") {
+      if (!hostAuthorized(request, url)) {
+        denyHost(response);
+        return;
+      }
       const body = await readBody(request);
-      if (body.action === "open") state.status = "open";
-      else if (body.action === "lock") state.status = "locked";
-      else if (body.action === "reveal") state.status = "revealed";
-      else if (body.action === "reset") state = { status: "setup", participants: [], updatedAt: Date.now() };
+      if (body.action === "open" && ["setup", "locked", "revealed"].includes(state.status)) state.status = "open";
+      else if (body.action === "lock" && state.status === "open") state.status = "locked";
+      else if (body.action === "reveal" && state.status === "locked") state.status = "revealed";
+      else if (body.action === "reset") state = emptyState();
       else {
-        sendJson(response, 400, { error: "未知控制命令。" });
+        sendJson(response, 409, { error: "当前课堂阶段不允许执行该操作。" });
         return;
       }
       broadcast({ all: true });
@@ -292,7 +432,7 @@ const server = http.createServer(async (request, response) => {
     }
     await serveStatic(request, response);
   } catch (error) {
-    sendJson(response, 500, { error: error.message || String(error) });
+    sendJson(response, Number(error.statusCode || 500), { error: error.message || String(error) });
   }
 });
 
@@ -303,6 +443,7 @@ server.listen(port, host, () => {
   }
   console.log("Teaching live platform running:");
   for (const url of urls) console.log(`  ${url}`);
-  console.log("Host screen: append ?role=host");
+  console.log("Host screen (teacher computer): append ?role=host");
+  console.log(`Remote host key: ${hostKey}`);
   console.log("Player screen: append ?role=player");
 });

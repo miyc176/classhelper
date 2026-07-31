@@ -20,12 +20,19 @@ async function request(pathname, options = {}) {
     ...options,
   });
   const text = await response.text();
-  const body = text ? JSON.parse(text) : {};
+  let body = {};
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { text };
+    }
+  }
   return { response, body };
 }
 
-async function post(pathname, body) {
-  return request(pathname, { method: "POST", body: JSON.stringify(body) });
+async function post(pathname, body, headers = {}) {
+  return request(pathname, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
 async function launchBrowser() {
@@ -66,6 +73,18 @@ let browser;
 try {
   const reset = await post("/api/control", { action: "reset" });
   check(reset.response.ok, "Unable to reset test session.", reset.body);
+  const invalidTransition = await post("/api/control", { action: "reveal" });
+  check(invalidTransition.response.status === 409, "Invalid setup-to-reveal transition was accepted.");
+  const malformedJson = await request("/api/join", { method: "POST", body: "{" });
+  check(malformedJson.response.status === 400, "Malformed JSON was not rejected as a client error.");
+  const oversizedBody = await request("/api/join", {
+    method: "POST",
+    body: JSON.stringify({ groupId: "group_1", nickname: "x".repeat(70 * 1024) }),
+  });
+  check(oversizedBody.response.status === 413, "Oversized request body was not rejected.");
+  const hiddenState = await request("/.live-session-state.json");
+  check(hiddenState.response.status === 404, "Persisted state file was exposed as a static asset.");
+  report.checks.push("phase transition guard", "malformed request guard", "request size guard", "state file privacy");
 
   browser = await launchBrowser();
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -120,7 +139,11 @@ try {
   check(hostState.body.submittedCount === 1, "Rapid submit created an invalid submission state.", hostState.body);
   report.checks.push("submit lock", "single participant submission");
 
-  const participant = hostState.body.participants[0];
+  const participant = await page.evaluate(() => {
+    const data = window.LIVE_TEACHING_DATA;
+    const key = `live-teaching-player-${data.sessionCode || data.activity}`;
+    return JSON.parse(sessionStorage.getItem(key));
+  });
   const invalidCases = [
     { name: "negative bid", bids: { sample_high_freq: -5 } },
     { name: "unknown candidate", bids: { unknown_candidate: 5 } },
@@ -129,7 +152,11 @@ try {
     { name: "over budget", bids: { sample_high_freq: 100, sample_low_freq_high_risk: 5 } },
   ];
   for (const testCase of invalidCases) {
-    const result = await post("/api/bid", { participantId: participant.id, bids: testCase.bids });
+    const result = await post("/api/bid", {
+      participantId: participant.id,
+      participantToken: participant.token,
+      bids: testCase.bids,
+    });
     check(result.response.status === 400, `${testCase.name} was not rejected.`, result.body);
     report.checks.push(`server rejects ${testCase.name}`);
   }
@@ -138,8 +165,48 @@ try {
   check(locked.response.ok, "Unable to lock auction.", locked.body);
   await page.waitForFunction(() => document.querySelector('input[type="range"]')?.disabled === true, null, { timeout: 8000 });
   check(!(await ranges.nth(0).isEnabled()), "Slider stayed enabled after lock.");
-  check(!(await submit.isEnabled()), "Submit stayed enabled after lock.");
+  check(await page.locator("#submit-bids").count() === 0, "Submit bar stayed visible after lock.");
   report.checks.push("locked controls");
+
+  const revealed = await post("/api/control", { action: "reveal" });
+  check(revealed.response.ok, "Unable to reveal auction.", revealed.body);
+  await page.waitForSelector(".player-results");
+  check(await page.locator(".player-results li").count() > 0, "Participant did not receive revealed aggregate results.");
+  report.checks.push("participant reveal results");
+
+  const hostPage = await context.newPage();
+  await hostPage.goto(new URL("?role=host&app=golden-sample-auction", baseUrl).href, { waitUntil: "domcontentloaded" });
+  await hostPage.waitForSelector("#export-results");
+  const downloadPromise = hostPage.waitForEvent("download");
+  await hostPage.locator("#export-results").click();
+  const download = await downloadPromise;
+  check(download.suggestedFilename().endsWith(".csv"), "Host export did not produce a CSV file.");
+  const hostLayout = await hostPage.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    bodyWidth: document.body.scrollWidth,
+  }));
+  check(hostLayout.bodyWidth <= hostLayout.viewportWidth + 1, "Host desktop page has horizontal overflow.", hostLayout);
+  const hostDesktopScreenshot = path.join(outputDir, "host-desktop.png");
+  await hostPage.screenshot({ path: hostDesktopScreenshot, fullPage: true });
+  report.screenshots.push(hostDesktopScreenshot);
+
+  const hostMobile = await context.newPage();
+  await hostMobile.setViewportSize({ width: 390, height: 844 });
+  await hostMobile.goto(new URL("?role=host&app=golden-sample-auction", baseUrl).href, { waitUntil: "domcontentloaded" });
+  await hostMobile.waitForSelector(".host-actions");
+  const hostMobileLayout = await hostMobile.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    bodyWidth: document.body.scrollWidth,
+  }));
+  check(
+    hostMobileLayout.bodyWidth <= hostMobileLayout.viewportWidth + 1,
+    "Host mobile page has horizontal overflow.",
+    hostMobileLayout,
+  );
+  const hostMobileScreenshot = path.join(outputDir, "host-mobile.png");
+  await hostMobile.screenshot({ path: hostMobileScreenshot, fullPage: true });
+  report.screenshots.push(hostMobileScreenshot);
+  report.checks.push("host CSV export", "host desktop layout", "host mobile layout");
 
   const desktopScreenshot = path.join(outputDir, "student-desktop.png");
   await page.screenshot({ path: desktopScreenshot, fullPage: true });
@@ -189,6 +256,7 @@ try {
   const submissions = await Promise.all(joins.map((result) => (
     post("/api/bid", {
       participantId: result.body.participant.id,
+      participantToken: result.body.participant.token,
       bids: { sample_high_freq: 100 },
     })
   )));
@@ -199,15 +267,27 @@ try {
     "Burst state counts are incorrect.",
     burstState.body,
   );
-  const scopedState = await request(`/api/state?role=player&participantId=${joins[0].body.participant.id}`);
+  const scopedState = await request(
+    `/api/state?role=player&participantId=${joins[0].body.participant.id}`,
+    { headers: { "X-Participant-Token": joins[0].body.participant.token } },
+  );
   check(
     scopedState.body.participants?.length === 1
       && scopedState.body.participant?.id === joins[0].body.participant.id,
     "Participant state exposed another participant record.",
     scopedState.body,
   );
+  const rejectedImpersonation = await request(
+    `/api/state?role=player&participantId=${joins[0].body.participant.id}`,
+    { headers: { "X-Participant-Token": "invalid-token" } },
+  );
+  check(
+    rejectedImpersonation.body.participant === null && rejectedImpersonation.body.participants?.length === 0,
+    "Invalid participant token exposed a participant record.",
+    rejectedImpersonation.body,
+  );
   report.burstDurationMs = Date.now() - burstStartedAt;
-  report.checks.push("30 participant join and submit burst", "participant payload isolation");
+  report.checks.push("30 participant join and submit burst", "participant payload isolation", "participant token rejection");
 
   check(consoleErrors.length === 0, "Browser console errors detected.", { consoleErrors });
   report.status = "pass";

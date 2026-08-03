@@ -7,10 +7,12 @@ import argparse
 import json
 import random
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
 from classic_payload import load_knowledge, load_question_bank, validate_workflow
+from pipeline_performance import record_stage
 
 
 def compact(text: Any, limit: int = 24) -> str:
@@ -95,6 +97,7 @@ def build_questions(bank: dict[str, Any], seed: int, count: int) -> list[dict[st
 
 
 def main() -> int:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Build a standalone educational whack-a-mole game.")
     parser.add_argument("knowledge_json")
     parser.add_argument("--question-bank", required=True, help="Reviewed question-bank JSON imported from the standard workbook.")
@@ -105,6 +108,7 @@ def main() -> int:
     parser.add_argument("--duration", type=int, default=60)
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--performance-file")
     args = parser.parse_args()
 
     source = Path(args.knowledge_json).resolve()
@@ -137,6 +141,8 @@ def main() -> int:
         f"window.GAME_KNOWLEDGE_COVERAGE = {json.dumps(payload['coverage'], ensure_ascii=False)};\n",
         encoding="utf-8",
     )
+    if args.performance_file:
+        record_stage(Path(args.performance_file).resolve(), "game_generation", time.perf_counter() - started, {"mode": "whack-a-mole", "items": len(questions)})
     print(json.dumps({"status": "pass", "out": str(out), "questions": len(questions)}, ensure_ascii=False))
     return 0
 

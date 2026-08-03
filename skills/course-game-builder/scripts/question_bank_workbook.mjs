@@ -69,6 +69,48 @@ function parseRefs(value) {
   });
 }
 
+async function recordPerformance(filePath, stageName, durationSeconds, metrics) {
+  if (!filePath) return;
+  const resolved = path.resolve(filePath);
+  const report = JSON.parse(await fs.readFile(resolved, "utf8"));
+  if (report.completed_at) throw new Error("Performance run is already complete; initialize a new run first.");
+  report.stages ||= {};
+  const stage = report.stages[stageName] || { status: "pending", invocations: [] };
+  const externallyStarted = stage.status === "running" && stage.active_started_timestamp;
+  const measuredDuration = externallyStarted
+    ? (Date.now() / 1000) - Number(stage.active_started_timestamp)
+    : durationSeconds;
+  stage.invocations.push({
+    started_at: externallyStarted ? stage.active_started_at : null,
+    completed_at: new Date().toISOString(),
+    duration_seconds: Math.max(0, Number(measuredDuration.toFixed(3))),
+    metrics,
+  });
+  stage.status = "completed";
+  delete stage.active_started_at;
+  delete stage.active_started_timestamp;
+  report.stages[stageName] = stage;
+  const invocations = Object.values(report.stages).flatMap((item) => item.invocations || []);
+  const cacheHits = invocations.reduce((sum, item) => sum + Number(item.metrics?.cache_hits || 0), 0);
+  const cacheMisses = invocations.reduce((sum, item) => sum + Number(item.metrics?.cache_misses || 0), 0);
+  report.summary = {
+    ...(report.summary || {}),
+    elapsed_seconds: Number(((Date.now() / 1000) - Number(report.started_timestamp || Date.now() / 1000)).toFixed(3)),
+    stage_seconds: Object.fromEntries(Object.entries(report.stages).map(([name, item]) => [
+      name, Number((item.invocations || []).reduce((sum, invocation) => sum + Number(invocation.duration_seconds || 0), 0).toFixed(3)),
+    ])),
+    cache_hits: cacheHits,
+    cache_misses: cacheMisses,
+    cache_hit_rate: cacheHits + cacheMisses ? Number((cacheHits / (cacheHits + cacheMisses)).toFixed(4)) : null,
+    stages_completed: Object.values(report.stages).filter((item) => item.status === "completed").length,
+    active_stages: Object.entries(report.stages).filter(([, item]) => item.status === "running").map(([name]) => name),
+    unrecorded_stages: Object.entries(report.stages).filter(([, item]) => item.status === "pending").map(([name]) => name),
+  };
+  const temporary = `${resolved}.${process.pid}.tmp`;
+  await fs.writeFile(temporary, `${JSON.stringify(report, null, 2)}\n`);
+  await fs.rename(temporary, resolved);
+}
+
 async function fileHash(filePath) {
   return crypto.createHash("sha256").update(await fs.readFile(filePath)).digest("hex");
 }
@@ -164,6 +206,7 @@ function styleSimpleSheet(sheet, range, headerRange) {
 }
 
 async function exportWorkbook(args) {
+  const startedAt = performance.now();
   required(args, ["knowledge", "questions", "workflow-state", "out"]);
   const knowledgePath = path.resolve(args.knowledge);
   const questionsPath = path.resolve(args.questions);
@@ -184,6 +227,7 @@ async function exportWorkbook(args) {
   try {
     await fs.access(outPath);
     if (JSON.stringify(cached) === JSON.stringify(signature) && previewsReady) {
+      await recordPerformance(args["performance-file"], "excel_generation", (performance.now() - startedAt) / 1000, { cache_hits: 1, cache_misses: 0, questions: 0 });
       console.log(JSON.stringify({ status: "pass", out: outPath, cache_hit: true }, null, 2));
       return;
     }
@@ -271,6 +315,7 @@ async function exportWorkbook(args) {
     }
   }
   await fs.writeFile(cachePath, JSON.stringify(signature, null, 2));
+  await recordPerformance(args["performance-file"], "excel_generation", (performance.now() - startedAt) / 1000, { cache_hits: 0, cache_misses: 1, questions: questions.length });
   const inspection = await workbook.inspect({ kind: "table", sheetId: "覆盖检查", range: `A1:E${Math.min(12, coverageRows.length + 1)}`, include: "values,formulas", tableMaxRows: 12, tableMaxCols: 5 });
   console.log(JSON.stringify({ status: "pass", out: outPath, questions: questions.length, previews, cache_hit: false, inspection: inspection.ndjson }, null, 2));
 }

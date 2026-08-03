@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from pipeline_performance import record_stage
+
 
 SUPPORTED = {".pptx", ".pdf", ".docx", ".txt", ".md", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
@@ -417,6 +419,8 @@ def build_report(files: list[Path], out_dir: Path, previous: dict[str, Any] | No
     processed.sort(key=lambda item: item[0])
     sources = [item[1] for item in processed]
     cache_hits = sum(item[2] for item in processed)
+    pages_total = sum(source.page_or_slide_count for source in sources)
+    pages_reprocessed = sum(item[1].page_or_slide_count for item in processed if not item[2])
     inventory = []
     text_units = []
     visual_units = []
@@ -484,6 +488,8 @@ def build_report(files: list[Path], out_dir: Path, previous: dict[str, Any] | No
             "visual_occurrences": len(visual_units),
             "unique_visual_assets": len(set(visual_asset_hashes)) if visual_asset_hashes else len(visual_units),
             "duplicate_visual_occurrences": len(visual_asset_hashes) - len(set(visual_asset_hashes)),
+            "pages_total": pages_total,
+            "pages_reprocessed": pages_reprocessed,
         },
         "agent_next_steps": [
             "Inspect context_units and rendered whole pages/slides first; use visual_units only for local zoom.",
@@ -495,11 +501,13 @@ def build_report(files: list[Path], out_dir: Path, previous: dict[str, Any] | No
 
 
 def main() -> int:
+    main_started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Inventory course materials for course-game-builder.")
     parser.add_argument("input", help="File or directory containing course materials.")
     parser.add_argument("--out", required=True, help="Output directory for extraction artifacts.")
     parser.add_argument("--workers", type=int, default=4, help="Number of files to extract concurrently.")
     parser.add_argument("--no-cache", action="store_true", help="Ignore a previous matching extraction manifest.")
+    parser.add_argument("--performance-file", help="Optional pipeline-performance.json to update.")
     args = parser.parse_args()
 
     input_path = Path(args.input).resolve()
@@ -519,6 +527,13 @@ def main() -> int:
 
     report = build_report(files, out_dir, previous, max(1, args.workers))
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.performance_file:
+        record_stage(
+            Path(args.performance_file).resolve(),
+            "material_parsing",
+            time.perf_counter() - main_started,
+            report["performance"],
+        )
     print(json.dumps({
         "status": "pass", "report": str(report_path), "sources": len(report["source_inventory"]),
         "performance": report["performance"],

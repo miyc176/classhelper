@@ -7,9 +7,12 @@ import argparse
 import json
 import re
 import sys
+import time
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
+
+from pipeline_performance import record_stage
 
 
 LOCAL_ATTRS = {
@@ -160,6 +163,7 @@ def validate(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Validate an HTML course mini-game.")
     parser.add_argument("game", help="Path to index.html or a game directory.")
     parser.add_argument("--knowledge-json", help="Path to extracted knowledge JSON.")
@@ -168,7 +172,12 @@ def main() -> int:
         action="store_true",
         help="Fail if any knowledge point is not declared by the game.",
     )
-    return validate(parser.parse_args())
+    parser.add_argument("--performance-file")
+    args = parser.parse_args()
+    result = validate(args)
+    if args.performance_file:
+        record_stage(Path(args.performance_file).resolve(), "validation", time.perf_counter() - started, {"validator": "html_game", "passed": result == 0})
+    return result
 
 
 if __name__ == "__main__":

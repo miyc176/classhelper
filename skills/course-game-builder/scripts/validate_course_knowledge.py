@@ -7,8 +7,11 @@ import argparse
 import hashlib
 import json
 import re
+import time
 from collections import Counter
 from pathlib import Path
+
+from pipeline_performance import record_stage
 
 
 FINAL_COVERAGE = {"covered", "no_instructional_content"}
@@ -173,11 +176,13 @@ def validate(data: dict, workflow: dict | None, require_complete: bool, manifest
 
 
 def main() -> int:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Validate complete source-grounded course knowledge.")
     parser.add_argument("knowledge_json")
     parser.add_argument("--workflow-state")
     parser.add_argument("--inventory-manifest", help="Original material-extraction.json used to build knowledge JSON.")
     parser.add_argument("--allow-incomplete", action="store_true")
+    parser.add_argument("--performance-file")
     args = parser.parse_args()
     data = json.loads(Path(args.knowledge_json).read_text(encoding="utf-8"))
     workflow = json.loads(Path(args.workflow_state).read_text(encoding="utf-8")) if args.workflow_state else None
@@ -185,6 +190,8 @@ def main() -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path else None
     errors, warnings, stats = validate(data, workflow, not args.allow_incomplete, manifest, sha256(manifest_path) if manifest_path else "")
     print(json.dumps({"status": "fail" if errors else "pass", "errors": errors, "warnings": warnings, "stats": stats}, ensure_ascii=False, indent=2))
+    if args.performance_file:
+        record_stage(Path(args.performance_file).resolve(), "validation", time.perf_counter() - started, {"validator": "course_knowledge", "passed": not errors})
     return 1 if errors else 0
 
 

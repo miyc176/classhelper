@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
+
+from pipeline_performance import record_stage
 
 
 TYPES = {"single_choice", "multiple_choice", "true_false", "matching", "classification", "ordering"}
@@ -30,12 +33,14 @@ def sha256(path: Path) -> str:
 
 
 def main() -> int:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Validate a course question bank.")
     parser.add_argument("knowledge_json")
     parser.add_argument("question_json")
     parser.add_argument("--workflow-state")
     parser.add_argument("--require-approved", action="store_true")
     parser.add_argument("--allow-partial-coverage", action="store_true")
+    parser.add_argument("--performance-file")
     args = parser.parse_args()
     knowledge_path = Path(args.knowledge_json).resolve()
     question_path = Path(args.question_json).resolve()
@@ -214,6 +219,8 @@ def main() -> int:
         "coverage": {key: value for key, value in sorted(coverage.items())},
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if args.performance_file:
+        record_stage(Path(args.performance_file).resolve(), "validation", time.perf_counter() - started, {"validator": "question_bank", "passed": not errors, "questions": len(questions)})
     return 1 if errors else 0
 
 

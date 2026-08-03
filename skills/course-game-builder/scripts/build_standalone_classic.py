@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import time
 from pathlib import Path
 
 from classic_payload import build_payload, load_knowledge, load_question_bank, validate_workflow
+from pipeline_performance import record_stage
 
 
 LABELS = {
@@ -22,6 +24,7 @@ MIN_ITEMS = {"memory": 6, "tictactoe": 9, "flappy": 4, "shooter": 3, "puzzle": 6
 
 
 def main() -> int:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Build one polished standalone classic knowledge game.")
     parser.add_argument("knowledge_json")
     parser.add_argument("--question-bank", required=True, help="Reviewed question-bank JSON imported from the standard workbook.")
@@ -31,6 +34,7 @@ def main() -> int:
     parser.add_argument("--title")
     parser.add_argument("--seed", type=int, default=11)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--performance-file")
     args = parser.parse_args()
 
     knowledge_path = Path(args.knowledge_json).resolve()
@@ -76,6 +80,8 @@ def main() -> int:
         + ";\n",
         encoding="utf-8",
     )
+    if args.performance_file:
+        record_stage(Path(args.performance_file).resolve(), "game_generation", time.perf_counter() - started, {"mode": mode, "items": len(content)})
     print(json.dumps({"status": "pass", "mode": mode, "out": str(out)}, ensure_ascii=False))
     return 0
 

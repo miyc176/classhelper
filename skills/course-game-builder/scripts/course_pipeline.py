@@ -11,6 +11,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pipeline_performance import empty_report, save as save_performance
+
 
 GAME_NAMES = {"whack-a-mole", "memory", "tictactoe", "flappy", "shooter", "puzzle"}
 
@@ -54,6 +56,7 @@ def main() -> int:
     init = sub.add_parser("init")
     init.add_argument("--course-title", required=True)
     init.add_argument("--out", required=True)
+    init.add_argument("--performance-out", help="Defaults to pipeline-performance.json beside workflow state.")
     for command in ["confirm-materials", "confirm-focus", "approve-questions", "select-games", "status"]:
         item = sub.add_parser(command)
         item.add_argument("state")
@@ -73,9 +76,12 @@ def main() -> int:
 
     if args.command == "init":
         path = Path(args.out).resolve()
+        performance_path = Path(args.performance_out).resolve() if args.performance_out else path.with_name("pipeline-performance.json")
+        save_performance(performance_path, empty_report(args.course_title))
         state = {
             "schema_version": "1.0",
             "course_title": args.course_title,
+            "performance_file": str(performance_path),
             "materials": {"status": "pending", "confirmed_at": None, "notes": ""},
             "focus": {"status": "pending", "confirmed_at": None, "knowledge_ids": [], "notes": ""},
             "questions": {"status": "pending", "approved_at": None, "workbook": "", "question_json": "", "question_sha256": "", "knowledge_json": "", "knowledge_sha256": "", "notes": ""},

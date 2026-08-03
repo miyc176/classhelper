@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
+
+from pipeline_performance import record_stage
 
 
 def refs_text(refs: list[dict]) -> str:
@@ -21,10 +24,12 @@ def md_cell(value: object) -> str:
 
 
 def main() -> int:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Build 课件知识点提取.md from knowledge JSON.")
     parser.add_argument("knowledge_json")
     parser.add_argument("--out", required=True)
     parser.add_argument("--workflow-state")
+    parser.add_argument("--performance-file")
     args = parser.parse_args()
     data = json.loads(Path(args.knowledge_json).read_text(encoding="utf-8"))
     workflow = json.loads(Path(args.workflow_state).read_text(encoding="utf-8")) if args.workflow_state else {}
@@ -130,6 +135,11 @@ def main() -> int:
     cache_hit = out.is_file() and out.read_text(encoding="utf-8") == content
     if not cache_hit:
         out.write_text(content, encoding="utf-8")
+    if args.performance_file:
+        record_stage(
+            Path(args.performance_file).resolve(), "knowledge_report", time.perf_counter() - started,
+            {"cache_hits": int(cache_hit), "cache_misses": int(not cache_hit), "knowledge_points": len(points)},
+        )
     print(json.dumps({"status": "pass", "out": str(out), "knowledge_points": len(points), "focus_candidates": len(focus_pool), "cache_hit": cache_hit}, ensure_ascii=False, indent=2))
     return 0
 

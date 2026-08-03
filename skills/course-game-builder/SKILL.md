@@ -31,6 +31,7 @@ Default behavior:
 Required output contract:
 
 - `workflow-state.json` records all user confirmations and the next allowed action.
+- `pipeline-performance.json` records stage timing, cache hit rate, total pages, and pages actually reprocessed for every run.
 - `knowledge.json` is source-traceable and matches the exact `material-extraction.json` hash and unit inventory.
 - `课件知识点提取.md` contains the full extraction, source coverage audit, proposed/confirmed focus, evidence, teaching value, common errors, and blocked content.
 - `<课程名称>课程题目.xlsx` contains fixed-format sheets grouped by question type. `approved-question-bank.json` is re-imported from this workbook before game generation.
@@ -68,26 +69,44 @@ Use the relevant file skills when available:
 Initialize and inventory:
 
 ```powershell
-python scripts/course_pipeline.py init --course-title "课程名称" --out path\to\work\workflow-state.json
-python scripts/inventory_materials.py path\to\course-materials --out path\to\work\extraction --workers 4
+python scripts/course_pipeline.py init --course-title "课程名称" --out path\to\work\workflow-state.json --performance-out path\to\work\pipeline-performance.json
+python scripts/inventory_materials.py path\to\course-materials --out path\to\work\extraction --workers 4 --performance-file path\to\work\pipeline-performance.json
 python scripts/course_pipeline.py confirm-materials path\to\work\workflow-state.json --notes "用户确认材料齐全"
 ```
 
 Then inspect ordered `context_units` plus rendered whole slides/pages before writing `knowledge.json`. `visual_units` are children used only for zoom. Set `material_extraction_sha256` to the exact SHA-256 of the manifest. Keep the manifest unit keys unchanged. Rerunning the same command reuses unchanged files by SHA-1; use `--no-cache` only to force a full rebuild.
 
+Wrap non-scripted work so rendering, visual analysis, knowledge engineering, and question generation are timed without including user wait time:
+
+```powershell
+python scripts/pipeline_performance.py start path\to\work\pipeline-performance.json --stage rendering
+# render slides/pages and contact sheets
+python scripts/pipeline_performance.py finish path\to\work\pipeline-performance.json --stage rendering --metric pages_total=42 --metric pages_reprocessed=8
+python scripts/pipeline_performance.py start path\to\work\pipeline-performance.json --stage ocr_visual_analysis
+# inspect ordered context batches and zoom uncertain child images
+python scripts/pipeline_performance.py finish path\to\work\pipeline-performance.json --stage ocr_visual_analysis --metric pages_total=42 --metric pages_reprocessed=8
+python scripts/pipeline_performance.py start path\to\work\pipeline-performance.json --stage knowledge_engineering
+# build and normalize knowledge.json
+python scripts/pipeline_performance.py finish path\to\work\pipeline-performance.json --stage knowledge_engineering --metric knowledge_points=96
+```
+
 Validate extraction, generate the detailed report, and record user-confirmed focus:
 
 ```powershell
-python scripts/validate_course_knowledge.py path\to\knowledge.json --inventory-manifest path\to\extraction\material-extraction.json --workflow-state path\to\workflow-state.json
-python scripts/build_knowledge_report.py path\to\knowledge.json --workflow-state path\to\workflow-state.json --out path\to\课件知识点提取.md
+python scripts/validate_course_knowledge.py path\to\knowledge.json --inventory-manifest path\to\extraction\material-extraction.json --workflow-state path\to\workflow-state.json --performance-file path\to\pipeline-performance.json
+python scripts/build_knowledge_report.py path\to\knowledge.json --workflow-state path\to\workflow-state.json --out path\to\课件知识点提取.md --performance-file path\to\pipeline-performance.json
 python scripts/course_pipeline.py confirm-focus path\to\workflow-state.json --ids kp_001,kp_004 --notes "用户确认"
 ```
 
 Create `question-bank.json` only after focus confirmation. Validate it, export the fixed workbook, and optionally render previews. Run the Node script from a workspace with `@oai/artifact-tool` available as described by the spreadsheets skill.
 
 ```powershell
-python scripts/validate_question_bank.py path\to\knowledge.json path\to\question-bank.json --workflow-state path\to\workflow-state.json
-node scripts/question_bank_workbook.mjs export --knowledge path\to\knowledge.json --questions path\to\question-bank.json --workflow-state path\to\workflow-state.json --out path\to\课程名称课程题目.xlsx --preview-dir path\to\previews
+python scripts/pipeline_performance.py start path\to\pipeline-performance.json --stage question_generation
+# draft all source-grounded questions by topic into question-bank.json
+python scripts/pipeline_performance.py finish path\to\pipeline-performance.json --stage question_generation --metric questions=120
+python scripts/validate_question_bank.py path\to\knowledge.json path\to\question-bank.json --workflow-state path\to\workflow-state.json --performance-file path\to\pipeline-performance.json
+python scripts/pipeline_performance.py start path\to\pipeline-performance.json --stage excel_generation
+node scripts/question_bank_workbook.mjs export --knowledge path\to\knowledge.json --questions path\to\question-bank.json --workflow-state path\to\workflow-state.json --out path\to\课程名称课程题目.xlsx --preview-dir path\to\previews --performance-file path\to\pipeline-performance.json
 ```
 
 After user edits Excel, import and validate again:
@@ -109,8 +128,8 @@ python scripts/course_pipeline.py select-games path\to\workflow-state.json --gam
 Generate the selected game only after all gates pass:
 
 ```powershell
-python scripts/build_whack_a_mole.py path\to\knowledge.json --question-bank path\to\approved-question-bank.json --workflow-state path\to\workflow-state.json --out path\to\whack-game --title "课程打地鼠" --force
-python scripts/build_standalone_classic.py path\to\knowledge.json --question-bank path\to\approved-question-bank.json --workflow-state path\to\workflow-state.json --mode memory --out path\to\memory-game --title "课程知识翻牌" --force
+python scripts/build_whack_a_mole.py path\to\knowledge.json --question-bank path\to\approved-question-bank.json --workflow-state path\to\workflow-state.json --out path\to\whack-game --title "课程打地鼠" --force --performance-file path\to\pipeline-performance.json
+python scripts/build_standalone_classic.py path\to\knowledge.json --question-bank path\to\approved-question-bank.json --workflow-state path\to\workflow-state.json --mode memory --out path\to\memory-game --title "课程知识翻牌" --force --performance-file path\to\pipeline-performance.json
 ```
 
 Preserve the fixed standalone visual shell unless the user explicitly asks for a redesign. Course adaptation changes question data, not template code. If a collection page is explicitly requested, build it as a launcher around standalone games.
@@ -127,7 +146,8 @@ Mode selection shortcuts:
 Validate each generated game:
 
 ```powershell
-python scripts/validate_html_game.py path\to\game --knowledge-json path\to\knowledge.json --require-all-knowledge
+python scripts/validate_html_game.py path\to\game --knowledge-json path\to\knowledge.json --require-all-knowledge --performance-file path\to\pipeline-performance.json
+python scripts/pipeline_performance.py complete path\to\pipeline-performance.json
 ```
 
 ## Extraction Rules
@@ -227,6 +247,7 @@ python scripts/validate_classic_template_set.py path\to\knowledge.json --out pat
 
 - `references/knowledge-schema.md`: canonical extraction schema and coverage report format.
 - `references/context-extraction.md`: page-first visual relationship extraction, batch inspection, caching, and incremental performance rules.
+- `references/performance-tracking.md`: mandatory stage timing, metrics, and completion-report rules.
 - `references/question-engineering.md`: closed-world question schema, option grounding, type rules, Excel format, and user approval gates.
 - `references/game-patterns.md`: mechanics selection guide and game design constraints.
 - `references/classic-game-patterns.md`: classic mini-game mapping rules for whack-a-mole, memory cards, tic-tac-toe quiz, flappy judge, thunder shooter, and knowledge puzzles.
@@ -235,6 +256,7 @@ python scripts/validate_classic_template_set.py path\to\knowledge.json --out pat
 - `assets/standalone-classic-template/`: standalone engine with separate visual identities and mechanics for memory, tic-tac-toe, flappy judgment, shooter, and knowledge puzzle outputs.
 - `scripts/inventory_materials.py`: local material inventory and text/embedded-image extraction for PPTX, PDF, DOCX, text, Markdown, and standalone images.
 - `scripts/course_pipeline.py`: deterministic workflow state and user-checkpoint manager.
+- `scripts/pipeline_performance.py`: creates and updates `pipeline-performance.json` for scripted and AI-assisted stages.
 - `scripts/validate_course_knowledge.py`: strict source hash, unit completeness, knowledge grounding, and focus validation.
 - `scripts/build_knowledge_report.py`: deterministic detailed `课件知识点提取.md` generator.
 - `scripts/validate_question_bank.py`: strict question coverage, source basis, option basis, review state, and game-fit validator.

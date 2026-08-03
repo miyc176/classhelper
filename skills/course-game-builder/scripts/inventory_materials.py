@@ -250,6 +250,10 @@ def build_report(files: list[Path], out_dir: Path) -> dict[str, Any]:
 
         locators = {unit["locator"] for unit in source.text_units}
         locators.update(unit["locator"] for unit in source.visual_units)
+        if source.kind == "pptx":
+            locators.update(f"slide {index}" for index in range(1, source.page_or_slide_count + 1))
+        elif source.kind == "pdf":
+            locators.update(f"page {index}" for index in range(1, source.page_or_slide_count + 1))
         if not locators:
             coverage_audit.append({
                 "source_id": source.source_id,

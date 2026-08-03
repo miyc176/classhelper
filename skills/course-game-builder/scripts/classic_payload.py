@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import random
 import re
 from pathlib import Path
@@ -19,6 +20,46 @@ def load_knowledge(path: Path) -> dict[str, Any]:
         if "id" not in point or "statement" not in point:
             raise ValueError("Every knowledge point must include id and statement.")
     return data
+
+
+def load_question_bank(path: Path, knowledge_path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    expected_hash = hashlib.sha256(knowledge_path.read_bytes()).hexdigest()
+    if data.get("knowledge_sha256") != expected_hash:
+        raise ValueError("Question bank does not match the current knowledge JSON.")
+    questions = data.get("questions")
+    if not isinstance(questions, list) or not questions:
+        raise ValueError("Question bank must contain a non-empty questions array.")
+    unresolved = [
+        str(item.get("id", "[missing]"))
+        for item in questions
+        if item.get("review_status") not in {"通过", "停用"}
+    ]
+    if unresolved:
+        raise ValueError(f"Question review is incomplete: {', '.join(unresolved)}")
+    data["questions"] = [item for item in questions if item.get("review_status") == "通过"]
+    if not data["questions"]:
+        raise ValueError("Question bank has no approved questions.")
+    return data
+
+
+def validate_workflow(workflow_path: Path, question_bank_path: Path, knowledge_path: Path, mode: str) -> dict[str, Any]:
+    state = json.loads(workflow_path.read_text(encoding="utf-8"))
+    for stage in ["materials", "focus", "questions"]:
+        expected = "approved" if stage == "questions" else "confirmed"
+        if state.get(stage, {}).get("status") != expected:
+            raise ValueError(f"Workflow stage {stage} is not {expected}.")
+    if state.get("games", {}).get("status") != "selected" or mode not in (state.get("games", {}).get("selected") or []):
+        raise ValueError(f"Game mode {mode} was not selected by the user.")
+    approved_hash = str(state.get("questions", {}).get("question_sha256", ""))
+    actual_hash = hashlib.sha256(question_bank_path.read_bytes()).hexdigest()
+    if approved_hash != actual_hash:
+        raise ValueError("Question bank does not match the exact JSON approved by the user.")
+    approved_knowledge_hash = str(state.get("questions", {}).get("knowledge_sha256", ""))
+    actual_knowledge_hash = hashlib.sha256(knowledge_path.read_bytes()).hexdigest()
+    if approved_knowledge_hash != actual_knowledge_hash:
+        raise ValueError("Knowledge JSON does not match the exact version used during question approval.")
+    return state
 
 
 def short(text: Any, limit: int = 58) -> str:
@@ -163,7 +204,89 @@ def true_false_item(point: dict[str, Any], rng: random.Random) -> dict[str, Any]
     }
 
 
-def build_payload(data: dict[str, Any], seed: int) -> dict[str, Any]:
+def payload_from_question_bank(data: dict[str, Any], bank: dict[str, Any]) -> dict[str, Any]:
+    questions = bank["questions"]
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for question in questions:
+        by_type.setdefault(str(question.get("type")), []).append(question)
+
+    def coverage(items: list[dict[str, Any]]) -> list[str]:
+        return list(dict.fromkeys(
+            str(knowledge_id)
+            for item in items
+            for knowledge_id in item.get("knowledge_ids") or []
+        ))
+
+    matching = [item for item in by_type.get("matching", []) if "memory" in (item.get("game_modes") or [])]
+    memory = []
+    for question in matching:
+        for pair_index, pair in enumerate(question.get("answers") or []):
+            left, separator, right = str(pair).partition("=>")
+            if not separator:
+                continue
+            memory.append({
+                "id": f"{question['id']}_{pair_index + 1}",
+                "knowledgeIds": [str(value) for value in question.get("knowledge_ids") or []],
+                "term": left.strip(),
+                "definition": right.strip(),
+                "why": str(question.get("explanation", "")),
+            })
+
+    single = by_type.get("single_choice", [])
+    tictactoe_source = [item for item in single if "tictactoe" in (item.get("game_modes") or [])]
+    shooter_source = [item for item in single if "shooter" in (item.get("game_modes") or [])]
+    true_false_source = [item for item in by_type.get("true_false", []) if "flappy" in (item.get("game_modes") or [])]
+    puzzle_source = [item for item in by_type.get("multiple_choice", []) if "puzzle" in (item.get("game_modes") or [])]
+    puzzle = []
+    for question in puzzle_source:
+        answers = [str(value) for value in question.get("answers") or []]
+        options = [str(value) for value in question.get("options") or []]
+        ordered = [*answers, *[value for value in options if value not in answers]][:6]
+        for option_index, option in enumerate(ordered):
+            puzzle.append({
+                "id": f"{question['id']}_{option_index + 1}",
+                "knowledgeIds": [str(value) for value in question.get("knowledge_ids") or []],
+                "type": str(question.get("topic", "课程概念")),
+                "label": option,
+                "text": str(question.get("topic", "课程概念")),
+                "why": str(question.get("explanation", "")),
+            })
+
+    used_questions = [*matching, *tictactoe_source, *shooter_source, *true_false_source, *puzzle_source]
+    return {
+        "title": data.get("course_title") or bank.get("course_title") or "课程经典小游戏",
+        "coverage": coverage(used_questions),
+        "memory": memory,
+        "tictactoe": [{
+            "id": str(item["id"]),
+            "knowledgeIds": [str(value) for value in item.get("knowledge_ids") or []],
+            "prompt": str(item["stem"]),
+            "answer": str(item["answers"][0]),
+            "choices": [str(value) for value in item["options"]],
+            "why": str(item["explanation"]),
+        } for item in tictactoe_source],
+        "flappy": [{
+            "id": str(item["id"]),
+            "knowledgeIds": [str(value) for value in item.get("knowledge_ids") or []],
+            "text": str(item["stem"]),
+            "answer": str(item["answers"][0]) == "正确",
+            "why": str(item["explanation"]),
+        } for item in true_false_source],
+        "shooter": [{
+            "id": str(item["id"]),
+            "knowledgeIds": [str(value) for value in item.get("knowledge_ids") or []],
+            "prompt": str(item["stem"]),
+            "answer": str(item["answers"][0]),
+            "choices": [str(value) for value in item["options"]],
+            "why": str(item["explanation"]),
+        } for item in shooter_source],
+        "puzzle": puzzle,
+    }
+
+
+def build_payload(data: dict[str, Any], seed: int, question_bank: dict[str, Any] | None = None) -> dict[str, Any]:
+    if question_bank is not None:
+        return payload_from_question_bank(data, question_bank)
     rng = random.Random(seed)
     points = [point for point in data["knowledge_points"] if point.get("assessment_prompts") or point.get("type") != "fact"]
     if not points:

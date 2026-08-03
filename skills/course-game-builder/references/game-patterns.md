@@ -33,4 +33,4 @@ For a full lesson, prefer 2-4 small games instead of one overloaded game:
 - Misconception game for common errors.
 - Exit-ticket challenge that mixes concepts.
 
-For classic or arcade-style requests, read `classic-game-patterns.md` and prefer recognizable mechanics such as whack-a-mole, memory cards, answer-gated tic-tac-toe, flappy true/false gates, shooter classification, and knowledge organization puzzles.
+For classic or arcade-style requests, read `classic-game-patterns.md` and use the fixed approved-question mappings: whack-a-mole single choice, memory matching, answer-gated tic-tac-toe single choice, flappy true/false gates, shooter single choice, and six-option/four-answer knowledge puzzles.

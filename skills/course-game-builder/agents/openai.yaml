@@ -1,7 +1,7 @@
 interface:
   display_name: "Course Game Builder"
   short_description: "Extract course knowledge and generate validated HTML classroom games."
-  default_prompt: "Use $course-game-builder to extract source-traceable knowledge from my course materials, generate polished HTML teaching games, and validate that they are playable."
+  default_prompt: "Use $course-game-builder to inventory my materials, extract and audit all source-traceable knowledge, confirm course focus with me, produce a categorized Excel question bank for my review, then generate only my selected polished HTML games from approved questions and validate playability."
 
 policy:
   allow_implicit_invocation: true

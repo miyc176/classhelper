@@ -10,6 +10,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from classic_payload import load_knowledge, load_question_bank, validate_workflow
+
 
 def compact(text: Any, limit: int = 24) -> str:
     value = " ".join(str(text).split())
@@ -69,37 +71,25 @@ def question_prompt(point: dict[str, Any], answer: str) -> str:
     return f"下列哪一项最准确对应“{answer}”？"
 
 
-def load_points(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    points = [
-        point for point in data.get("knowledge_points", [])
-        if point.get("id") and point.get("statement") and point.get("assessment_prompts")
-    ]
-    if len(points) < 4:
-        raise ValueError("At least four assessable knowledge points are required.")
-    return data, points
-
-
-def build_questions(points: list[dict[str, Any]], seed: int, count: int) -> list[dict[str, Any]]:
+def build_questions(bank: dict[str, Any], seed: int, count: int) -> list[dict[str, Any]]:
     rng = random.Random(seed)
-    selected = points[:]
+    selected = [
+        item for item in bank["questions"]
+        if item.get("type") == "single_choice" and "whack-a-mole" in (item.get("game_modes") or [])
+    ]
+    if len(selected) < 4:
+        raise ValueError("At least four approved whack-a-mole single-choice questions are required.")
     rng.shuffle(selected)
     selected = selected[: min(count, len(selected))]
     questions = []
-    for point in selected:
-        answer = answer_label(point["statement"])
-        decoys = dedupe([answer_label(item["statement"]) for item in points if item["id"] != point["id"]])
-        rng.shuffle(decoys)
-        choices = dedupe([answer, *decoys])[:4]
-        if len(choices) < 4:
-            choices.extend(f"{answer}-{i + 1}" for i in range(4 - len(choices)))
-        rng.shuffle(choices)
+    for item in selected:
         questions.append({
-            "id": str(point["id"]),
-            "prompt": question_prompt(point, answer),
-            "answer": answer,
-            "choices": choices,
-            "why": str(point.get("teaching_value") or point.get("evidence") or point["statement"]),
+            "id": str(item["id"]),
+            "knowledgeIds": [str(value) for value in item.get("knowledge_ids") or []],
+            "prompt": str(item["stem"]),
+            "answer": str(item["answers"][0]),
+            "choices": [str(value) for value in item["options"]],
+            "why": str(item["explanation"]),
         })
     return questions
 
@@ -107,6 +97,8 @@ def build_questions(points: list[dict[str, Any]], seed: int, count: int) -> list
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build a standalone educational whack-a-mole game.")
     parser.add_argument("knowledge_json")
+    parser.add_argument("--question-bank", required=True, help="Reviewed question-bank JSON imported from the standard workbook.")
+    parser.add_argument("--workflow-state", required=True, help="Confirmed workflow-state.json.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--title")
     parser.add_argument("--count", type=int, default=10)
@@ -117,13 +109,20 @@ def main() -> int:
 
     source = Path(args.knowledge_json).resolve()
     out = Path(args.out).resolve()
-    data, points = load_points(source)
-    questions = build_questions(points, args.seed, args.count)
+    data = load_knowledge(source)
+    question_bank_path = Path(args.question_bank).resolve()
+    validate_workflow(Path(args.workflow_state).resolve(), question_bank_path, source, "whack-a-mole")
+    bank = load_question_bank(question_bank_path, source)
+    questions = build_questions(bank, args.seed, args.count)
     payload = {
         "title": args.title or f"{data.get('course_title', '课程')}：知识打地鼠",
         "duration": max(20, args.duration),
         "visible_ms": 5200,
-        "coverage": [item["id"] for item in questions],
+        "coverage": list(dict.fromkeys(
+            knowledge_id
+            for item in questions
+            for knowledge_id in item.get("knowledgeIds", [])
+        )),
         "questions": questions,
     }
     if out.exists():

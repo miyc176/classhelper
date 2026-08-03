@@ -12,6 +12,18 @@ Critical gates must pass before delivery unless explicitly reported as blocked.
 - Strong: Duplicates are normalized without losing exceptions or examples.
 - Strong: Concepts, procedures, formulas, examples, and misconceptions are typed separately.
 
+## Question Engineering Gates
+
+- Critical: `material_extraction_sha256` matches the current extraction manifest, and final coverage unit keys exactly match the manifest.
+- Critical: The user confirmed the complete material inventory and course focus in `workflow-state.json`.
+- Critical: `课件知识点提取.md` reports all knowledge points, source evidence, focus rationale, and unresolved content.
+- Critical: Every knowledge point has at least one active question; every confirmed focus point has at least two questions across two types.
+- Critical: Every question binds to exact course `source_basis` and source location.
+- Critical: Every option has aligned `option_sources` and exact `option_basis`; no distractor comes from model memory or external knowledge.
+- Critical: Games read only rows marked `通过` from `approved-question-bank.json`.
+- Critical: The user approved the questions and selected game modes before generation.
+- Strong: The fixed workbook round-trips through export/import without changing question content.
+
 ## Game Gates
 
 - Critical: The generated HTML opens without runtime errors in a browser.
@@ -33,8 +45,7 @@ Critical gates must pass before delivery unless explicitly reported as blocked.
 - Strong: Controls are keyboard reachable where practical.
 - Strong: Visual design is clean, readable, and domain-appropriate.
 - Strong: The game has reset/retry and progress state.
-- Strong: A deterministic baseline can be regenerated from `knowledge.json` with `scripts/build_game_from_knowledge.py`.
-- Strong: Creative classic games can be regenerated from `knowledge.json` with `scripts/build_whack_a_mole.py` or `scripts/build_standalone_classic.py` when classic mini-games are requested.
+- Strong: Classic games can be regenerated deterministically from `knowledge.json` plus `approved-question-bank.json` with `scripts/build_whack_a_mole.py` or `scripts/build_standalone_classic.py`.
 - Strong: The full classic template set passes `scripts/validate_classic_template_set.py` after any template or generator edit.
 
 ## Delivery Checklist

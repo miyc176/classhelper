@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { createRequire } from "node:module";
 
 const requireFromRunner = createRequire(path.join(process.cwd(), "artifact-runner.cjs"));
@@ -66,6 +67,10 @@ function parseRefs(value) {
     const [sourceId, ...locator] = item.split("@");
     return { source_id: sourceId, locator: locator.join("@") };
   });
+}
+
+async function fileHash(filePath) {
+  return crypto.createHash("sha256").update(await fs.readFile(filePath)).digest("hex");
 }
 
 function styleTitle(sheet, title, subtitle) {
@@ -160,9 +165,32 @@ function styleSimpleSheet(sheet, range, headerRange) {
 
 async function exportWorkbook(args) {
   required(args, ["knowledge", "questions", "workflow-state", "out"]);
-  const knowledge = JSON.parse(await fs.readFile(path.resolve(args.knowledge), "utf8"));
-  const bank = JSON.parse(await fs.readFile(path.resolve(args.questions), "utf8"));
-  const workflow = JSON.parse(await fs.readFile(path.resolve(args["workflow-state"]), "utf8"));
+  const knowledgePath = path.resolve(args.knowledge);
+  const questionsPath = path.resolve(args.questions);
+  const workflowPath = path.resolve(args["workflow-state"]);
+  const outPath = path.resolve(args.out);
+  const previewDir = args["preview-dir"] ? path.resolve(args["preview-dir"]) : null;
+  const signature = {
+    knowledge: await fileHash(knowledgePath), questions: await fileHash(questionsPath),
+    workflow: await fileHash(workflowPath), format: "question-workbook-v2",
+  };
+  const cachePath = `${outPath}.build.json`;
+  const previewNames = ["使用说明", "课程重点", "覆盖检查", ...Object.values(TYPE_SHEETS)];
+  let cached = null;
+  try { cached = JSON.parse(await fs.readFile(cachePath, "utf8")); } catch {}
+  const previewsReady = !previewDir || (await Promise.all(previewNames.map(async (name) => {
+    try { await fs.access(path.join(previewDir, `${name}.png`)); return true; } catch { return false; }
+  }))).every(Boolean);
+  try {
+    await fs.access(outPath);
+    if (JSON.stringify(cached) === JSON.stringify(signature) && previewsReady) {
+      console.log(JSON.stringify({ status: "pass", out: outPath, cache_hit: true }, null, 2));
+      return;
+    }
+  } catch {}
+  const knowledge = JSON.parse(await fs.readFile(knowledgePath, "utf8"));
+  const bank = JSON.parse(await fs.readFile(questionsPath, "utf8"));
+  const workflow = JSON.parse(await fs.readFile(workflowPath, "utf8"));
   if (workflow.focus?.status !== "confirmed") throw new Error("Course focus must be confirmed before workbook export.");
   const workbook = Workbook.create();
   const questions = bank.questions || [];
@@ -228,24 +256,23 @@ async function exportWorkbook(args) {
   metadata.getRange("A:A").format.columnWidth = 24;
   metadata.getRange("B:B").format.columnWidth = 72;
 
-  const outPath = path.resolve(args.out);
   await fs.mkdir(path.dirname(outPath), { recursive: true });
   const output = await SpreadsheetFile.exportXlsx(workbook);
   await output.save(outPath);
 
-  const previewDir = args["preview-dir"] ? path.resolve(args["preview-dir"]) : null;
   const previews = [];
   if (previewDir) {
     await fs.mkdir(previewDir, { recursive: true });
-    for (const name of ["使用说明", "课程重点", "覆盖检查", ...Object.values(TYPE_SHEETS)]) {
+    for (const name of previewNames) {
       const preview = await workbook.render({ sheetName: name, autoCrop: "all", scale: 1, format: "png" });
       const previewPath = path.join(previewDir, `${name}.png`);
       await fs.writeFile(previewPath, new Uint8Array(await preview.arrayBuffer()));
       previews.push(previewPath);
     }
   }
+  await fs.writeFile(cachePath, JSON.stringify(signature, null, 2));
   const inspection = await workbook.inspect({ kind: "table", sheetId: "覆盖检查", range: `A1:E${Math.min(12, coverageRows.length + 1)}`, include: "values,formulas", tableMaxRows: 12, tableMaxCols: 5 });
-  console.log(JSON.stringify({ status: "pass", out: outPath, questions: questions.length, previews, inspection: inspection.ndjson }, null, 2));
+  console.log(JSON.stringify({ status: "pass", out: outPath, questions: questions.length, previews, cache_hit: false, inspection: inspection.ndjson }, null, 2));
 }
 
 function cell(row, headerMap, name) {

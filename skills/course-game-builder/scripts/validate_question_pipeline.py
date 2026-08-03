@@ -44,10 +44,15 @@ def main() -> int:
         "page_or_slide_count": 12, "extraction_status": "complete", "notes": "",
     }]
     manifest = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
+        "extractor_version": "context-v4",
         "source_inventory": inventory,
         "text_units": [],
         "visual_units": [],
+        "context_units": [
+            {"source_id": "src_001", "locator": f"slide {index}", "modality": "slide_context", "elements": [], "relations": []}
+            for index in range(1, 13)
+        ],
         "coverage_audit": [
             {"source_id": "src_001", "unit": f"slide {index}", "status": "needs_knowledge_extraction", "knowledge_ids": [], "notes": ""}
             for index in range(1, 13)

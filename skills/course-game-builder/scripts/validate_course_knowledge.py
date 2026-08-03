@@ -108,6 +108,20 @@ def validate(data: dict, workflow: dict | None, require_complete: bool, manifest
             errors.append("Coverage audit omitted manifest units: " + ", ".join(f"{source} {unit}" for source, unit in missing_units))
         if extra_units:
             errors.append("Coverage audit contains units absent from the manifest: " + ", ".join(f"{source} {unit}" for source, unit in extra_units))
+        context_units = {
+            (str(item.get("source_id", "")), str(item.get("locator", "")))
+            for item in manifest.get("context_units") or []
+        }
+        if (manifest.get("visual_units") or []) and not context_units:
+            errors.append("Visual units exist without context_units; page/slide relationships would be lost.")
+        if context_units and context_units != expected_units:
+            errors.append("context_units do not exactly match canonical coverage units.")
+        for visual in manifest.get("visual_units") or []:
+            parent = (str(visual.get("source_id", "")), str(visual.get("parent_unit", "")))
+            if not visual.get("parent_unit"):
+                errors.append(f"Visual unit lacks parent_unit: {visual.get('source_id')} {visual.get('locator')}.")
+            elif context_units and parent not in context_units:
+                errors.append(f"Visual unit parent is absent from context_units: {parent[0]} {parent[1]}.")
 
     type_counts: Counter[str] = Counter()
     importance_counts: Counter[str] = Counter()

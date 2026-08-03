@@ -126,8 +126,11 @@ def main() -> int:
 
     out = Path(args.out).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-    print(json.dumps({"status": "pass", "out": str(out), "knowledge_points": len(points), "focus_candidates": len(focus_pool)}, ensure_ascii=False, indent=2))
+    content = "\n".join(lines).rstrip() + "\n"
+    cache_hit = out.is_file() and out.read_text(encoding="utf-8") == content
+    if not cache_hit:
+        out.write_text(content, encoding="utf-8")
+    print(json.dumps({"status": "pass", "out": str(out), "knowledge_points": len(points), "focus_candidates": len(focus_pool), "cache_hit": cache_hit}, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -7,10 +7,14 @@ Critical gates must pass before delivery unless explicitly reported as blocked.
 - Critical: Every provided source is inventoried.
 - Critical: Every page, slide, or standalone image is either covered or marked no instructional content/blocked.
 - Critical: Image-only knowledge is inspected visually or OCRed; it is not ignored because text extraction succeeded.
+- Critical: Embedded images are interpreted inside their complete page/slide context; isolated child images are used only for zoom.
+- Critical: Multi-image, caption, grouping, connector, sequence, comparison, and spatial relationships are preserved when they carry instructional meaning.
 - Critical: Each knowledge point has at least one source reference.
 - Critical: Unreadable, missing, or ambiguous content is reported with exact file and locator.
 - Strong: Duplicates are normalized without losing exceptions or examples.
 - Strong: Concepts, procedures, formulas, examples, and misconceptions are typed separately.
+- Strong: Unchanged source files hit the extraction cache; multiple changed files are processed concurrently.
+- Strong: Repeated visual assets are deduplicated while retaining every page occurrence and relationship.
 
 ## Question Engineering Gates
 

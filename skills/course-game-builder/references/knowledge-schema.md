@@ -61,15 +61,17 @@ Use this schema for the extracted course model. Store it as JSON when building g
 ## Extraction Notes
 
 - Treat `scripts/inventory_materials.py` output as a staging artifact, not the final knowledge model.
+- Read `references/context-extraction.md`. Use `context_units` as the primary visual source; `visual_units` are child crops for zoom and must retain `parent_unit`, geometry, and nearby text.
 - Copy the SHA-256 of `material-extraction.json` into `material_extraction_sha256`. Validation must fail if the staging inventory changes after extraction.
 - Convert every `text_units` entry into one or more atomic knowledge points, unless it contains no instructional content.
-- Inspect every `visual_units` entry before finalizing. Add either visual-derived knowledge points or a `coverage_audit` note explaining why it is not instructional.
+- Inspect every visual inside its rendered `context_unit` before finalizing. Open child `visual_units` separately only when a detail needs zoom. Add either contextual visual-derived knowledge points or a `coverage_audit` note explaining why the whole unit is not instructional.
 - Use `visual_observation` for information only visible in diagrams, charts, screenshots, or pictures.
 - Use `relationship` when the important learning target is how two concepts connect.
 - Use `procedure` for ordered steps, decision paths, algorithms, workflows, or lab instructions.
 - Use `misconception` when a slide highlights a common mistake or contrast.
 - Keep `statement` atomic. Split compound statements that would need different feedback in a game.
 - Preserve source references through every merge and rewrite.
+- For image-derived points, use the parent slide/page as `locator` and place element/image ids plus geometry in `region`; do not cite an unpacked image as though it were independent of its page.
 - `topic` must be a source-derived chapter, module, or concept group, not an invented curriculum category.
 - `importance` is only a proposed level until the user confirms course focus. Record the source signal in `importance_basis`; never infer importance from general world knowledge.
 - Keep only source-supported points as `scope_status: in_scope`. Put ambiguity in `coverage_audit` and do not quietly turn it into a question.

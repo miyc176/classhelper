@@ -19,6 +19,7 @@ Default behavior:
 - If the user provides an existing `knowledge.json`, validate it, generate the Markdown report and question workbook, and continue from the corresponding checkpoint. Existing JSON does not waive review.
 - Treat supplied course materials as a closed world. Do not introduce facts, examples, terminology, constraints, answers, or distractors from model memory or the internet.
 - Do not generate any game until the user has confirmed course focus, approved the question bank, and selected game modes.
+- Use context-first extraction and incremental caching. Never inspect unpacked images as an unordered pile when their page/slide context exists.
 - If the user asks for classic, arcade, creative, polished, or game-like outputs, prefer the fixed standalone polished templates and replace only generated data files unless a template bug is verified.
 - If the user asks for a specific classic game, generate one standalone HTML game for that mechanic.
 - If the user asks for multiple game types, generate separate standalone folders. If they explicitly ask for one HTML collection or launcher, create a fresh launcher that links to the standalone games; do not use an old shared arcade shell.
@@ -52,16 +53,15 @@ Use the relevant file skills when available:
 
 1. Initialize `workflow-state.json`. Inventory all source files with stable ids and hashes using `scripts/inventory_materials.py`.
 2. **Stop and ask:** “这些是否是本课程全部材料？” List files and counts. If files are missing, add them and rerun inventory. Record confirmation with `confirm-materials`.
-3. Extract text, notes, tables, formulas, and visual knowledge. Render and inspect every slide/page/image. Preserve atomic conditions, exceptions, examples, relationships, common errors, and assessment cues in `knowledge.json` using `references/knowledge-schema.md`.
+3. Read `references/context-extraction.md`. Extract text, notes, tables, formulas, shape geometry, image placement, grouping, and connectors. Render and inspect ordered whole slides/pages in batches; open child images only for zoom. Preserve cross-image and image-text relationships in `knowledge.json`.
 4. Compare final coverage keys against `material-extraction.json` with `validate_course_knowledge.py`. Every PPT/PDF page and every extracted image must be `covered` or have a concrete `no_instructional_content` note. Any blocked unit stops the workflow.
 5. Generate `课件知识点提取.md`. Propose focus only from source signals such as objectives, headings, repetition, summaries, emphasis, or teacher wording.
 6. **Stop and ask:** show the focus table and ask the user to confirm, add, remove, or reprioritize knowledge ids. Record the confirmed ids with `confirm-focus`; do not decide course重点 from general knowledge.
 7. Draft `question-bank.json` using `references/question-engineering.md`. Cover every knowledge point; cover each confirmed focus point at least twice across two types. Every option must include aligned `option_sources` and an exact `option_basis` copied from course knowledge or an extracted common error.
 8. Validate, then export `<课程名称>课程题目.xlsx` with `question_bank_workbook.mjs`. Initial rows remain `待审核`.
-9. **Stop and ask:** “这些题目是否可以使用？” If no, accept edits/additions in chat or let the user edit Excel. Re-import the fixed workbook and repeat validation. If yes, apply explicit approval and require all active rows to be `通过`.
-10. **Stop and ask:** let the user select one or more existing games: 打地鼠、知识翻牌、答题井字棋、飞翔判断、雷霆战机、知识拼图.
-11. Generate only selected standalone games from `approved-question-bank.json`, never directly from loose knowledge text. Validate every game statically and in a browser, including one real core interaction.
-12. Deliver the Markdown, Excel, approved JSON, selected games, coverage mapping, validation results, and explicit limitations.
+9. **Stop and ask once:** “这些题目是否可以使用？若可以，请同时选择游戏：打地鼠、知识翻牌、答题井字棋、飞翔判断、雷霆战机、知识拼图。” If no, accept edits/additions in chat or let the user edit Excel, then re-import and repeat validation. If yes, apply explicit approval, record the selected modes, and continue without another confirmation round trip.
+10. Generate only selected standalone games from `approved-question-bank.json`, never directly from loose knowledge text. Validate every game statically and in a browser, including one real core interaction.
+11. Deliver the Markdown, Excel, approved JSON, selected games, coverage mapping, validation results, timing/cache summary, and explicit limitations.
 
 ## Command Path
 
@@ -69,11 +69,11 @@ Initialize and inventory:
 
 ```powershell
 python scripts/course_pipeline.py init --course-title "课程名称" --out path\to\work\workflow-state.json
-python scripts/inventory_materials.py path\to\course-materials --out path\to\work\extraction
+python scripts/inventory_materials.py path\to\course-materials --out path\to\work\extraction --workers 4
 python scripts/course_pipeline.py confirm-materials path\to\work\workflow-state.json --notes "用户确认材料齐全"
 ```
 
-Then inspect every `text_units` and `visual_units` entry plus every rendered slide/page before writing `knowledge.json`. Set `material_extraction_sha256` to the exact SHA-256 of the manifest. Keep the manifest unit keys unchanged.
+Then inspect ordered `context_units` plus rendered whole slides/pages before writing `knowledge.json`. `visual_units` are children used only for zoom. Set `material_extraction_sha256` to the exact SHA-256 of the manifest. Keep the manifest unit keys unchanged. Rerunning the same command reuses unchanged files by SHA-1; use `--no-cache` only to force a full rebuild.
 
 Validate extraction, generate the detailed report, and record user-confirmed focus:
 
@@ -226,6 +226,7 @@ python scripts/validate_classic_template_set.py path\to\knowledge.json --out pat
 ## Resources
 
 - `references/knowledge-schema.md`: canonical extraction schema and coverage report format.
+- `references/context-extraction.md`: page-first visual relationship extraction, batch inspection, caching, and incremental performance rules.
 - `references/question-engineering.md`: closed-world question schema, option grounding, type rules, Excel format, and user approval gates.
 - `references/game-patterns.md`: mechanics selection guide and game design constraints.
 - `references/classic-game-patterns.md`: classic mini-game mapping rules for whack-a-mole, memory cards, tic-tac-toe quiz, flappy judge, thunder shooter, and knowledge puzzles.

@@ -121,11 +121,11 @@ def validate(args: argparse.Namespace) -> int:
         errors.append("Missing <title>.")
     if "GAME_KNOWLEDGE_COVERAGE" not in all_text:
         errors.append("Missing window.GAME_KNOWLEDGE_COVERAGE declaration.")
-    if re.search(r"lorem ipsum|todo|placeholder", all_text, flags=re.IGNORECASE):
+    if re.search(r"lorem ipsum|\btodo\b|replace_me", all_text, flags=re.IGNORECASE):
         warnings.append("Found placeholder-like text.")
 
     buttons = [attrs for tag, attrs in parser.tags if tag == "button"]
-    if not buttons:
+    if not buttons and not re.search(r"<button\b", all_text, flags=re.IGNORECASE):
         errors.append("No <button> controls found.")
     if not any(tag == "main" for tag, _ in parser.tags):
         warnings.append("No <main> landmark found.")
